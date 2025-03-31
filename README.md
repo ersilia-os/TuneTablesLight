@@ -156,6 +156,10 @@ The `run_tt_job` script accepts several special flags. We describe their functio
 
 `--print_stdout`: If you pass this argument, TuneTables will print stdout and stderr to the console after each task completes.
 
+### Additional Artifacts
+
+Additional artifacts from the paper, such as per-dataset and per-fold results for both TuneTables and baseline methods, as well as other metrics, can be found in this [HuggingFace Repository](https://huggingface.co/datasets/penfever/tunetables-results).
+
 ## Citation
 
 Please cite our [paper](https://arxiv.org/abs/2402.11137) if you use the code or model in this repo.
