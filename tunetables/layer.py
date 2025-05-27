@@ -4,7 +4,16 @@ import math
 
 from torch import nn
 import torch
-from torch.nn.modules.transformer import _get_activation_fn, Module, Tensor, Optional, MultiheadAttention, Linear, Dropout, LayerNorm
+from torch.nn.modules.transformer import (
+    _get_activation_fn,
+    Module,
+    Tensor,
+    Optional,
+    MultiheadAttention,
+    Linear,
+    Dropout,
+    LayerNorm,
+)
 from torch.utils.checkpoint import checkpoint
 from torch.nn.modules.linear import NonDynamicallyQuantizableLinear
 from torch import nn, Tensor
@@ -19,6 +28,7 @@ from torch.overrides import (
     has_torch_function_unary,
     has_torch_function_variadic,
 )
+
 
 def taylor_linear_attention_forward(
     query: Tensor,
@@ -49,7 +59,7 @@ def taylor_linear_attention_forward(
     taylor_order: int = 2,  # Number of Taylor series terms to use
 ) -> Tuple[Tensor, Optional[Tensor]]:
     """Modified multi-head attention using Taylor series linear attention.
-    
+
     This version replaces the standard scaled dot-product attention with a linear
     attention mechanism based on Taylor series approximation.
     """
@@ -98,8 +108,10 @@ def taylor_linear_attention_forward(
         )
 
     # Keep all the shape checking and projection code the same
-    is_batched = _mha_shape_check(query, key, value, key_padding_mask, attn_mask, num_heads)
-    
+    is_batched = _mha_shape_check(
+        query, key, value, key_padding_mask, attn_mask, num_heads
+    )
+
     if not is_batched:
         query = query.unsqueeze(1)
         key = key.unsqueeze(1)
@@ -109,7 +121,7 @@ def taylor_linear_attention_forward(
 
     tgt_len, bsz, embed_dim = query.shape
     src_len, _, _ = key.shape
-    
+
     # Keep the projection code the same
     if not use_separate_proj_weight:
         q, k, v = _in_projection_packed(query, key, value, in_proj_weight, in_proj_bias)
@@ -144,48 +156,50 @@ def taylor_linear_attention_forward(
         for i in range(1, taylor_order):
             q_terms.append(q_terms[-1] * q / i)
             k_terms.append(k_terms[-1] * k / i)
-        
+
         # Sum up the terms for q and k
         q_taylor = torch.stack(q_terms, dim=-1).sum(dim=-1)
         k_taylor = torch.stack(k_terms, dim=-1).sum(dim=-1)
-        
+
         # Apply mask if provided
         if mask is not None:
             k_taylor = k_taylor.masked_fill(mask == 0, 0.0)
-        
+
         # Compute global context
-        normalizer = torch.einsum('bnd,bmd->bnm', q_taylor, k_taylor)
-        
+        normalizer = torch.einsum("bnd,bmd->bnm", q_taylor, k_taylor)
+
         # Compute output
-        output = torch.einsum('bnm,bmd->bnd', normalizer, v)
-        
+        output = torch.einsum("bnm,bmd->bnd", normalizer, v)
+
         if mask is not None:
             output = output.masked_fill(mask == 0, 0.0)
-        
+
         return output
 
     # Apply the linear attention
     if need_weights:
         # Compute attention weights using Taylor approximation
         q_scaled = q * math.sqrt(1.0 / float(head_dim))
-        attn_output_weights = torch.einsum('bnd,bmd->bnm', q_scaled, k)
-        
+        attn_output_weights = torch.einsum("bnd,bmd->bnm", q_scaled, k)
+
         if attn_mask is not None:
             attn_output_weights = attn_output_weights + attn_mask
-            
+
         attn_output_weights = softmax(attn_output_weights, dim=-1)
-        
+
         if dropout_p > 0.0:
             attn_output_weights = dropout(attn_output_weights, p=dropout_p)
-            
-        attn_output = torch.einsum('bnm,bmd->bnd', attn_output_weights, v)
+
+        attn_output = torch.einsum("bnm,bmd->bnd", attn_output_weights, v)
     else:
         # Use pure linear attention without computing weights
         attn_output = taylor_linear_attention(q, k, v, attn_mask)
         attn_output_weights = None
 
     # Reshape output
-    attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len * bsz, embed_dim)
+    attn_output = (
+        attn_output.transpose(0, 1).contiguous().view(tgt_len * bsz, embed_dim)
+    )
     attn_output = linear(attn_output, out_proj_weight, out_proj_bias)
     attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
 
@@ -195,6 +209,7 @@ def taylor_linear_attention_forward(
             attn_output_weights = attn_output_weights.squeeze(0)
 
     return attn_output, attn_output_weights
+
 
 class TaylorMultiheadAttention(nn.Module):
     r"""Allows the model to jointly attend to information from different representation subspaces.
@@ -293,9 +308,9 @@ class TaylorMultiheadAttention(nn.Module):
         self.dropout = dropout
         self.batch_first = batch_first
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), "embed_dim must be divisible by num_heads"
+        assert self.head_dim * num_heads == self.embed_dim, (
+            "embed_dim must be divisible by num_heads"
+        )
 
         if not self._qkv_same_embed_dim:
             self.q_proj_weight = Parameter(
@@ -492,8 +507,10 @@ class TaylorMultiheadAttention(nn.Module):
         elif query.is_nested and (
             key_padding_mask is not None or attn_mask is not None
         ):
-            why_not_fast_path = "supplying both src_key_padding_mask and src_mask at the same time \
+            why_not_fast_path = (
+                "supplying both src_key_padding_mask and src_mask at the same time \
                                  is not supported with NestedTensor input"
+            )
         elif torch.is_autocast_enabled():
             why_not_fast_path = "autocast is enabled"
 
@@ -617,6 +634,7 @@ class TaylorMultiheadAttention(nn.Module):
         else:
             return attn_output, attn_output_weights
 
+
 class TransformerEncoderLayer(Module):
     r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
     This standard encoder layer is based on the paper "Attention Is All You Need".
@@ -645,19 +663,42 @@ class TransformerEncoderLayer(Module):
         >>> src = torch.rand(32, 10, 512)
         >>> out = encoder_layer(src)
     """
-    __constants__ = ['batch_first']
 
-    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu",
-                 layer_norm_eps=1e-5, batch_first=False, pre_norm=False,
-                 device=None, dtype=None, recompute_attn=False, linear=False) -> None:
-        factory_kwargs = {'device': device, 'dtype': dtype}
+    __constants__ = ["batch_first"]
+
+    def __init__(
+        self,
+        d_model,
+        nhead,
+        dim_feedforward=2048,
+        dropout=0.1,
+        activation="relu",
+        layer_norm_eps=1e-5,
+        batch_first=False,
+        pre_norm=False,
+        device=None,
+        dtype=None,
+        recompute_attn=False,
+        linear=False,
+    ) -> None:
+        factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         if linear:
-            self.self_attn = TaylorMultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first,
-                                                **factory_kwargs)
+            self.self_attn = TaylorMultiheadAttention(
+                d_model,
+                nhead,
+                dropout=dropout,
+                batch_first=batch_first,
+                **factory_kwargs,
+            )
         else:
-            self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first,
-                                                **factory_kwargs)
+            self.self_attn = MultiheadAttention(
+                d_model,
+                nhead,
+                dropout=dropout,
+                batch_first=batch_first,
+                **factory_kwargs,
+            )
         # Implementation of Feedforward model
         self.linear1 = Linear(d_model, dim_feedforward, **factory_kwargs)
         self.dropout = Dropout(dropout)
@@ -673,11 +714,16 @@ class TransformerEncoderLayer(Module):
         self.activation = _get_activation_fn(activation)
 
     def __setstate__(self, state):
-        if 'activation' not in state:
-            state['activation'] = F.relu
+        if "activation" not in state:
+            state["activation"] = F.relu
         super().__setstate__(state)
 
-    def forward(self, src: Tensor, src_mask: Optional[Tensor] = None, src_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+    def forward(
+        self,
+        src: Tensor,
+        src_mask: Optional[Tensor] = None,
+        src_key_padding_mask: Optional[Tensor] = None,
+    ) -> Tensor:
         r"""Pass the input through the encoder layer.
 
         Args:
@@ -703,32 +749,76 @@ class TransformerEncoderLayer(Module):
             num_train_tokens = trainset_src_mask.shape[0]
 
             global_tokens_src = src_[:num_global_tokens]
-            train_tokens_src = src_[num_global_tokens:num_global_tokens+num_train_tokens]
-            global_and_train_tokens_src = src_[:num_global_tokens+num_train_tokens]
-            eval_tokens_src = src_[num_global_tokens+num_train_tokens:]
+            train_tokens_src = src_[
+                num_global_tokens : num_global_tokens + num_train_tokens
+            ]
+            global_and_train_tokens_src = src_[: num_global_tokens + num_train_tokens]
+            eval_tokens_src = src_[num_global_tokens + num_train_tokens :]
 
+            attn = (
+                partial(checkpoint, self.self_attn)
+                if self.recompute_attn
+                else self.self_attn
+            )
 
-            attn = partial(checkpoint, self.self_attn) if self.recompute_attn else self.self_attn
+            global_tokens_src2 = attn(
+                global_tokens_src,
+                global_and_train_tokens_src,
+                global_and_train_tokens_src,
+                None,
+                True,
+                global_src_mask,
+            )[0]
+            train_tokens_src2 = attn(
+                train_tokens_src,
+                global_tokens_src,
+                global_tokens_src,
+                None,
+                True,
+                trainset_src_mask,
+            )[0]
+            eval_tokens_src2 = attn(
+                eval_tokens_src, src_, src_, None, True, valset_src_mask
+            )[0]
 
-            global_tokens_src2 = attn(global_tokens_src, global_and_train_tokens_src, global_and_train_tokens_src, None, True, global_src_mask)[0]
-            train_tokens_src2 = attn(train_tokens_src, global_tokens_src, global_tokens_src, None, True, trainset_src_mask)[0]
-            eval_tokens_src2 = attn(eval_tokens_src, src_, src_,
-                                    None, True, valset_src_mask)[0]
-
-            src2 = torch.cat([global_tokens_src2, train_tokens_src2, eval_tokens_src2], dim=0)
+            src2 = torch.cat(
+                [global_tokens_src2, train_tokens_src2, eval_tokens_src2], dim=0
+            )
 
         elif isinstance(src_mask, int):
             assert src_key_padding_mask is None
             single_eval_position = src_mask
-            src_left = self.self_attn(src_[:single_eval_position], src_[:single_eval_position], src_[:single_eval_position])[0]
-            src_right = self.self_attn(src_[single_eval_position:], src_[:single_eval_position], src_[:single_eval_position])[0]
+            src_left = self.self_attn(
+                src_[:single_eval_position],
+                src_[:single_eval_position],
+                src_[:single_eval_position],
+            )[0]
+            src_right = self.self_attn(
+                src_[single_eval_position:],
+                src_[:single_eval_position],
+                src_[:single_eval_position],
+            )[0]
             src2 = torch.cat([src_left, src_right], dim=0)
         else:
             if self.recompute_attn:
-                src2 = checkpoint(self.self_attn, src_, src_, src_, src_key_padding_mask, True, src_mask, use_reentrant=True)[0]
+                src2 = checkpoint(
+                    self.self_attn,
+                    src_,
+                    src_,
+                    src_,
+                    src_key_padding_mask,
+                    True,
+                    src_mask,
+                    use_reentrant=True,
+                )[0]
             else:
-                src2 = self.self_attn(src_, src_, src_, attn_mask=src_mask,
-                                      key_padding_mask=src_key_padding_mask)[0]
+                src2 = self.self_attn(
+                    src_,
+                    src_,
+                    src_,
+                    attn_mask=src_mask,
+                    key_padding_mask=src_key_padding_mask,
+                )[0]
         src = src + self.dropout1(src2)
         if not self.pre_norm:
             src = self.norm1(src)

@@ -13,7 +13,8 @@ import numpy as np
 
 import wandb
 
-def seed_all(seed = 0):
+
+def seed_all(seed=0):
     # print('Setting random, numpy, torch seeds to', seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
@@ -22,9 +23,12 @@ def seed_all(seed = 0):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
+
 # copied from huggingface
-def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5, last_epoch=-1):
-    """ Create a schedule with a learning rate that decreases following the
+def get_cosine_schedule_with_warmup(
+    optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5, last_epoch=-1
+):
+    """Create a schedule with a learning rate that decreases following the
     values of the cosine function between 0 and `pi * cycles` after a warmup
     period during which it increases linearly between 0 and 1.
     """
@@ -32,33 +36,52 @@ def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
     def lr_lambda(current_step):
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
-        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
-        return max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
+        progress = float(current_step - num_warmup_steps) / float(
+            max(1, num_training_steps - num_warmup_steps)
+        )
+        return max(
+            0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+        )
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
+
 # copied from huggingface
-def get_restarting_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, steps_per_restart, num_cycles=0.5, last_epoch=-1):
+def get_restarting_cosine_schedule_with_warmup(
+    optimizer,
+    num_warmup_steps,
+    num_training_steps,
+    steps_per_restart,
+    num_cycles=0.5,
+    last_epoch=-1,
+):
     assert num_training_steps % steps_per_restart == 0
 
     def inner_lr_lambda(current_step, num_warmup_steps, num_training_steps):
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
-        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
-        return max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
+        progress = float(current_step - num_warmup_steps) / float(
+            max(1, num_training_steps - num_warmup_steps)
+        )
+        return max(
+            0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+        )
 
     def lr_lambda(current_step):
         inner_step = current_step % steps_per_restart
-        return inner_lr_lambda(inner_step,
-                               num_warmup_steps if current_step < steps_per_restart else 0,
-                               steps_per_restart
-                               )
-
+        return inner_lr_lambda(
+            inner_step,
+            num_warmup_steps if current_step < steps_per_restart else 0,
+            steps_per_restart,
+        )
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
+
 # copied from huggingface
-def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
+def get_linear_schedule_with_warmup(
+    optimizer, num_warmup_steps, num_training_steps, last_epoch=-1
+):
     """
     Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0, after
     a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
@@ -81,7 +104,9 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
         return max(
-            0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps))
+            0.0,
+            float(num_training_steps - current_step)
+            / float(max(1, num_training_steps - num_warmup_steps)),
         )
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
@@ -98,7 +123,9 @@ def get_weighted_single_eval_pos_sampler(max_len):
     where p <= `max_len`. At most `max_len` - 1 examples are shown to the Transformer.
     :return: Sampler that can be fed to `train()` as `single_eval_pos_gen`.
     """
-    return lambda: random.choices(range(max_len), [1 / (max_len - i) for i in range(max_len)])[0]
+    return lambda: random.choices(
+        range(max_len), [1 / (max_len - i) for i in range(max_len)]
+    )[0]
 
 
 def get_uniform_single_eval_pos_sampler(max_len, min_len=0):
@@ -108,8 +135,10 @@ def get_uniform_single_eval_pos_sampler(max_len, min_len=0):
     """
     return lambda: random.choices(range(min_len, max_len))[0]
 
+
 def get_fixed_batch_sampler(max_len):
     return lambda: random.choices([max_len])[0]
+
 
 class SeqBN(nn.Module):
     def __init__(self, d_model):
@@ -130,19 +159,22 @@ def set_locals_in_self(locals):
     Especially useful right at the beginning of `__init__`.
     :param locals: `locals()`
     """
-    self = locals['self']
+    self = locals["self"]
     for var_name, val in locals.items():
-        if var_name != 'self': setattr(self, var_name, val)
+        if var_name != "self":
+            setattr(self, var_name, val)
 
 
-default_device = 'cuda:0' if torch.cuda.is_available() else 'cpu:0'
+default_device = "cuda:0" if torch.cuda.is_available() else "cpu:0"
 
 
 # Copied from StackOverflow, but we do an eval on the values additionally
 class StoreDictKeyPair(argparse.Action):
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
         self._nargs = nargs
-        super(StoreDictKeyPair, self).__init__(option_strings, dest, nargs=nargs, **kwargs)
+        super(StoreDictKeyPair, self).__init__(
+            option_strings, dest, nargs=nargs, **kwargs
+        )
 
     def __call__(self, parser, namespace, values, option_string=None):
         my_dict = {}
@@ -155,16 +187,20 @@ class StoreDictKeyPair(argparse.Action):
         setattr(namespace, self.dest, my_dict)
         print("dict values: {}".format(my_dict))
 
+
 def get_nan_value(v, set_value_to_nan=0.0):
     if random.random() < set_value_to_nan:
         return v
     else:
         return random.choice([-999, 0, 1, 999])
 
+
 def to_ranking(data):
-    x = (data >= data.unsqueeze(-3))
+    x = data >= data.unsqueeze(-3)
     x = x.sum(0)
     return x
+
+
 # TODO: Is there a better way to do this?
 #   1. Cmparing to unique elements: When all values are different we still get quadratic blowup
 #   2. Argsort(Argsort()) returns ranking, but with duplicate values there is an ordering which is problematic
@@ -172,19 +208,23 @@ def to_ranking(data):
 def to_ranking_low_mem(data):
     x = torch.zeros_like(data)
     for col in range(data.shape[-1]):
-        x_ = (data[:, :, col] >= data[:, :, col].unsqueeze(-2))
+        x_ = data[:, :, col] >= data[:, :, col].unsqueeze(-2)
         x_ = x_.sum(0)
         x[:, :, col] = x_
     return x
 
+
 def nan_handling_missing_for_unknown_reason_value(set_value_to_nan=0.0):
-    return get_nan_value(float('nan'), set_value_to_nan)
+    return get_nan_value(float("nan"), set_value_to_nan)
+
 
 def nan_handling_missing_for_no_reason_value(set_value_to_nan=0.0):
-    return get_nan_value(float('-inf'), set_value_to_nan)
+    return get_nan_value(float("-inf"), set_value_to_nan)
+
 
 def nan_handling_missing_for_a_reason_value(set_value_to_nan=0.0):
-    return get_nan_value(float('inf'), set_value_to_nan)
+    return get_nan_value(float("inf"), set_value_to_nan)
+
 
 def torch_masked_mean(x, mask, dim=0, return_share_of_ignored_values=False):
     """
@@ -195,8 +235,9 @@ def torch_masked_mean(x, mask, dim=0, return_share_of_ignored_values=False):
     num = torch.where(mask, torch.full_like(x, 1), torch.full_like(x, 0)).sum(dim=dim)
     value = torch.where(mask, x, torch.full_like(x, 0)).sum(dim=dim)
     if return_share_of_ignored_values:
-        return value / num, 1.-num/x.shape[dim]
+        return value / num, 1.0 - num / x.shape[dim]
     return value / num
+
 
 def torch_masked_std(x, mask, dim=0):
     """
@@ -207,26 +248,34 @@ def torch_masked_std(x, mask, dim=0):
     value = torch.where(mask, x, torch.full_like(x, 0)).sum(dim=dim)
     mean = value / num
     mean_broadcast = torch.repeat_interleave(mean.unsqueeze(dim), x.shape[dim], dim=dim)
-    quadratic_difference_from_mean = torch.square(torch.where(mask, mean_broadcast - x, torch.full_like(x, 0)))
+    quadratic_difference_from_mean = torch.square(
+        torch.where(mask, mean_broadcast - x, torch.full_like(x, 0))
+    )
     return torch.sqrt(torch.sum(quadratic_difference_from_mean, dim=dim) / (num - 1))
 
+
 def torch_nanmean(x, dim=0, return_nanshare=False):
-    return torch_masked_mean(x, ~torch.isnan(x), dim=dim, return_share_of_ignored_values=return_nanshare)
+    return torch_masked_mean(
+        x, ~torch.isnan(x), dim=dim, return_share_of_ignored_values=return_nanshare
+    )
+
 
 def torch_nanstd(x, dim=0):
     return torch_masked_std(x, ~torch.isnan(x), dim=dim)
 
+
 def normalize_data(data, normalize_positions=-1):
     if normalize_positions > 0:
         mean = torch_nanmean(data[:normalize_positions], dim=0)
-        std = torch_nanstd(data[:normalize_positions], dim=0) + .000001
+        std = torch_nanstd(data[:normalize_positions], dim=0) + 0.000001
     else:
         mean = torch_nanmean(data, dim=0)
-        std = torch_nanstd(data, dim=0) + .000001
+        std = torch_nanstd(data, dim=0) + 0.000001
     data = (data - mean) / std
     data = torch.clip(data, min=-100, max=100)
 
     return data
+
 
 def remove_outliers(X, n_sigma=4, normalize_positions=-1):
     # Expects T, B, H
@@ -244,13 +293,19 @@ def remove_outliers(X, n_sigma=4, normalize_positions=-1):
     cut_off = data_std * n_sigma
     lower, upper = data_mean - cut_off, data_mean + cut_off
 
-    X = torch.maximum(-torch.log(1+torch.abs(X)) + lower, X)
-    X = torch.minimum(torch.log(1+torch.abs(X)) + upper, X)
-            # print(ds[1][data < lower, col], ds[1][data > upper, col], ds[1][~np.isnan(data), col].shape, data_mean, data_std)
+    X = torch.maximum(-torch.log(1 + torch.abs(X)) + lower, X)
+    X = torch.minimum(torch.log(1 + torch.abs(X)) + upper, X)
+    # print(ds[1][data < lower, col], ds[1][data > upper, col], ds[1][~np.isnan(data), col].shape, data_mean, data_std)
     return X
 
+
 def bool_mask_to_att_mask(mask):
-    return mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+    return (
+        mask.float()
+        .masked_fill(mask == 0, float("-inf"))
+        .masked_fill(mask == 1, float(0.0))
+    )
+
 
 def print_on_master_only(is_master):
     import builtins as __builtin__
@@ -266,55 +321,77 @@ def print_on_master_only(is_master):
 
 
 def init_dist(device):
-    #print('init dist')
-    if 'LOCAL_RANK' in os.environ:
+    # print('init dist')
+    if "LOCAL_RANK" in os.environ:
         # launched with torch.distributed.launch
         rank = int(os.environ["LOCAL_RANK"])
-        print('torch.distributed.launch and my rank is', rank)
+        print("torch.distributed.launch and my rank is", rank)
         torch.cuda.set_device(rank)
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(rank)
-        torch.distributed.init_process_group(backend="nccl", init_method="env://", timeout=datetime.timedelta(seconds=20),
-                                             world_size=torch.cuda.device_count(), rank=rank)
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(rank)
+        torch.distributed.init_process_group(
+            backend="nccl",
+            init_method="env://",
+            timeout=datetime.timedelta(seconds=20),
+            world_size=torch.cuda.device_count(),
+            rank=rank,
+        )
         torch.distributed.barrier()
         print_on_master_only(rank == 0)
-        print(f"Distributed training on {torch.cuda.device_count()} GPUs, this is rank {rank}, "
-              "only I can print, but when using print(..., force=True) it will print on all ranks.")
-        return True, rank, f'cuda:{rank}'
-    elif 'SLURM_PROCID' in os.environ and torch.cuda.device_count() > 1:
+        print(
+            f"Distributed training on {torch.cuda.device_count()} GPUs, this is rank {rank}, "
+            "only I can print, but when using print(..., force=True) it will print on all ranks."
+        )
+        return True, rank, f"cuda:{rank}"
+    elif "SLURM_PROCID" in os.environ and torch.cuda.device_count() > 1:
         # this is for multi gpu when starting with submitit
-        assert device != 'cpu:0'
-        rank = int(os.environ['SLURM_PROCID'])
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12355'
+        assert device != "cpu:0"
+        rank = int(os.environ["SLURM_PROCID"])
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "12355"
         torch.cuda.set_device(rank)
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(rank)
-        print('distributed submitit launch and my rank is', rank)
-        torch.distributed.init_process_group(backend="nccl", init_method="env://", timeout=datetime.timedelta(seconds=20),
-                                             world_size=torch.cuda.device_count(), rank=rank)
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(rank)
+        print("distributed submitit launch and my rank is", rank)
+        torch.distributed.init_process_group(
+            backend="nccl",
+            init_method="env://",
+            timeout=datetime.timedelta(seconds=20),
+            world_size=torch.cuda.device_count(),
+            rank=rank,
+        )
         torch.distributed.barrier()
         print_on_master_only(rank == 0)
-        print(f"Distributed training on {torch.cuda.device_count()} GPUs, this is rank {rank}, "
-              "only I can print, but when using print(..., force=True) it will print on all ranks.")
+        print(
+            f"Distributed training on {torch.cuda.device_count()} GPUs, this is rank {rank}, "
+            "only I can print, but when using print(..., force=True) it will print on all ranks."
+        )
 
-        return True, rank, f'cuda:{rank}'
+        return True, rank, f"cuda:{rank}"
     else:
-        #print('Not using distributed')
+        # print('Not using distributed')
         # will not change any of the behavior of print, but allows putting the force=True in the print calls
         print_on_master_only(True)
         return False, 0, device
 
+
 # NOP function for python with statements (x = NOP(); with x:)
-class NOP():
+class NOP:
     def __enter__(self):
         pass
+
     def __exit__(self, type, value, traceback):
         pass
 
+
 def check_compatibility(dl):
-    if hasattr(dl, 'num_outputs'):
-        print('`num_outputs` for the DataLoader is deprecated. It is assumed to be 1 from now on.')
-        assert dl.num_outputs != 1, "We assume num_outputs to be 1. Instead of the num_ouputs change your loss." \
-                                    "We specify the number of classes in the CE loss."
+    if hasattr(dl, "num_outputs"):
+        print(
+            "`num_outputs` for the DataLoader is deprecated. It is assumed to be 1 from now on."
+        )
+        assert dl.num_outputs != 1, (
+            "We assume num_outputs to be 1. Instead of the num_ouputs change your loss."
+            "We specify the number of classes in the CE loss."
+        )
+
 
 def product_dict(dic):
     keys = dic.keys()
@@ -322,12 +399,16 @@ def product_dict(dic):
     for instance in itertools.product(*vals):
         yield dict(zip(keys, instance))
 
-def normalize_by_used_features_f(x, num_features_used, num_features, normalize_with_sqrt=False):
+
+def normalize_by_used_features_f(
+    x, num_features_used, num_features, normalize_with_sqrt=False
+):
     if normalize_with_sqrt:
-        return x / (num_features_used / num_features)**(1 / 2)
+        return x / (num_features_used / num_features) ** (1 / 2)
     return x / (num_features_used / num_features)
 
-class EmbeddingConcatenator():
+
+class EmbeddingConcatenator:
     def __init__(self, model, method, prefix_weights) -> None:
         self.model = model
         self.original_prefix_size = model.prefix_size
@@ -342,15 +423,19 @@ class EmbeddingConcatenator():
     def concat_embedding(self):
         if self.concatenated_embedding is not None:
             return
-        #extract embedding parameters
+        # extract embedding parameters
         if self.method == "duplicate":
-            self.concatenated_embedding = torch.cat([self.original_embedding, self.original_embedding], dim=0).to(self.model.prefix_embedding.weight.device)
+            self.concatenated_embedding = torch.cat(
+                [self.original_embedding, self.original_embedding], dim=0
+            ).to(self.model.prefix_embedding.weight.device)
             # print("concatenated embedding shape: {}".format(self.concatenated_embedding.shape))
-            self.concatenated_y_embedding = torch.cat([self.original_y_embedding, self.original_y_embedding], dim=0).to(self.model.prefix_embedding.weight.device)
+            self.concatenated_y_embedding = torch.cat(
+                [self.original_y_embedding, self.original_y_embedding], dim=0
+            ).to(self.model.prefix_embedding.weight.device)
             self.prefix_size = self.original_prefix_size * 2
         else:
             raise NotImplementedError("Method {} not implemented!".format(self.method))
-    
+
     def get_model(self):
         return self.model
 
@@ -368,6 +453,7 @@ class EmbeddingConcatenator():
         self.model.prefix_size = self.original_prefix_size
         self.model.freeze_parameters_except_prefix()
 
+
 def is_json_serializable(obj):
     """
     Test if an object is JSON serializable.
@@ -384,6 +470,7 @@ def is_json_serializable(obj):
     except (TypeError, OverflowError):
         return False
 
+
 def make_serializable(config_sample):
     if isinstance(config_sample, torch.Tensor):
         config_sample = "tensor"
@@ -397,6 +484,7 @@ def make_serializable(config_sample):
         config_sample = str(config_sample)
     return config_sample
 
+
 def get_wandb_api_key(api_key_file="./config/wandb_api_key.txt"):
     # todo: if we make a config folder, put wandb_api_key.txt into the config folder
     try:
@@ -405,12 +493,18 @@ def get_wandb_api_key(api_key_file="./config/wandb_api_key.txt"):
         with open(api_key_file, "r") as f:
             key = f.read()
         return key.strip()
-    
+
+
 def wandb_init(config, model_string):
     mkey = get_wandb_api_key()
     wandb.login(key=mkey)
     simple_config = make_serializable(config)
-    if simple_config['state_dict'] is not None:
-        simple_config['state_dict'] = 'omitted'
-    wandb.init(config=simple_config, name=model_string, group=config['wandb_group'],
-            project=config['wandb_project'], entity=config['wandb_entity'])
+    if simple_config["state_dict"] is not None:
+        simple_config["state_dict"] = "omitted"
+    wandb.init(
+        config=simple_config,
+        name=model_string,
+        group=config["wandb_group"],
+        project=config["wandb_project"],
+        entity=config["wandb_entity"],
+    )

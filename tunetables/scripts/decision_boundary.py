@@ -29,7 +29,7 @@ def _check_boundary_response_method(estimator, response_method):
         Prediction method of estimator.
     """
     has_classes = hasattr(estimator, "classes_")
-    
+
     if has_classes and len(estimator.classes_) > 2:
         if response_method not in {"auto", "predict"}:
             msg = (
@@ -234,8 +234,7 @@ class DecisionBoundaryDisplay:
 
         if not grid_resolution > 1:
             raise ValueError(
-                "grid_resolution must be greater than 1. Got"
-                f" {grid_resolution} instead."
+                f"grid_resolution must be greater than 1. Got {grid_resolution} instead."
             )
 
         if not eps >= 0:
@@ -247,8 +246,7 @@ class DecisionBoundaryDisplay:
         if plot_method not in possible_plot_methods:
             available_methods = ", ".join(possible_plot_methods)
             raise ValueError(
-                f"plot_method must be one of {available_methods}. "
-                f"Got {plot_method} instead."
+                f"plot_method must be one of {available_methods}. Got {plot_method} instead."
             )
 
         x0, x1 = _safe_indexing(X, 0, axis=1), _safe_indexing(X, 1, axis=1)

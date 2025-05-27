@@ -8,7 +8,7 @@ import sys
 CV = 5
 param_grid = {}
 
-param_grid['saint'] = {
+param_grid["saint"] = {
     # as in https://github.com/kathrinse/TabSurvey/blob/main/models/saint.py#L268
     "dim": [32, 64, 128, 256],
     "depth": [1, 2, 3, 6, 12],
@@ -16,9 +16,10 @@ param_grid['saint'] = {
     "dropout": [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
 }
 
+
 def saint_metric(x, y, test_x, test_y, cat_features, metric_used):
     ## Original Implementation https://github.com/somepago/saint
-    ## Reimplementation from https://github.com/kathrinse/TabSurvey
+    ## Reimplementation from https://github.com/kathrinse/TabSurvey #
     ## HowTo install
     # git clone git@github.com:kathrinse/TabSurvey.git
     # cd TabSurvey
@@ -41,6 +42,7 @@ def saint_metric(x, y, test_x, test_y, cat_features, metric_used):
         from models.saint import SAINT
 
         import warnings
+
         def warn(*args, **kwargs):
             pass
 
@@ -61,7 +63,7 @@ def saint_metric(x, y, test_x, test_y, cat_features, metric_used):
 
         clf = SAINT(model_args)
 
-        clf = GridSearchCV(clf, param_grid['saint'], cv=min(CV, x.shape[0]//2))
+        clf = GridSearchCV(clf, param_grid["saint"], cv=min(CV, x.shape[0] // 2))
         # fit model to data
         clf.fit(x, y.long())
 

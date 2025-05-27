@@ -5,20 +5,33 @@ import pickle
 
 import torch
 
+
 def print_models(base_path, model_string):
     print(model_string)
 
     for i in range(80):
         for e in range(50):
-            exists = Path(os.path.join(base_path, f'models_diff/prior_diff_real_checkpoint{model_string}_n_{i}_epoch_{e}.cpkt')).is_file()
+            exists = Path(
+                os.path.join(
+                    base_path,
+                    f"models_diff/prior_diff_real_checkpoint{model_string}_n_{i}_epoch_{e}.cpkt",
+                )
+            ).is_file()
             if exists:
-                print(os.path.join(base_path, f'models_diff/prior_diff_real_checkpoint{model_string}_n_{i}_epoch_{e}.cpkt'))
+                print(
+                    os.path.join(
+                        base_path,
+                        f"models_diff/prior_diff_real_checkpoint{model_string}_n_{i}_epoch_{e}.cpkt",
+                    )
+                )
         print()
+
 
 class CustomUnpickler(pickle.Unpickler):
     def find_class(self, module, name):
-        if name == 'Manager':
+        if name == "Manager":
             from settings import Manager
+
             return Manager
         try:
             return self.find_class_cpu(module, name)
@@ -26,7 +39,7 @@ class CustomUnpickler(pickle.Unpickler):
             return None
 
     def find_class_cpu(self, module, name):
-        if module == 'torch.storage' and name == '_load_from_bytes':
-            return lambda b: torch.load(io.BytesIO(b), map_location='cpu')
+        if module == "torch.storage" and name == "_load_from_bytes":
+            return lambda b: torch.load(io.BytesIO(b), map_location="cpu")
         else:
             return super().find_class(module, name)

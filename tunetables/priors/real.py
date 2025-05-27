@@ -15,7 +15,12 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import QuantileTransformer, RobustScaler, PowerTransformer, OneHotEncoder
+from sklearn.preprocessing import (
+    QuantileTransformer,
+    RobustScaler,
+    PowerTransformer,
+    OneHotEncoder,
+)
 from sklearn.feature_selection import SelectKBest, mutual_info_classif
 from sklearn.decomposition import PCA
 from sklearn.decomposition import FastICA
@@ -29,17 +34,24 @@ import torch
 from torch.utils.data import Dataset, DataLoader, Subset
 
 
-from tunetables.utils import normalize_data, remove_outliers, normalize_by_used_features_f
+from tunetables.utils import (
+    normalize_data,
+    remove_outliers,
+    normalize_by_used_features_f,
+)
 from tunetables.priors import real
 
 try:
     import umap
 except ImportError:
-    print("umap is not available; subset maker umap will not work until it is installed")
+    print(
+        "umap is not available; subset maker umap will not work until it is installed"
+    )
+
 
 class TabDS(Dataset):
     def __init__(self, X, y):
-        #check if NaNs are present in y
+        # check if NaNs are present in y
         if np.isnan(y).any():
             print("WARNING: NaNs present in y, dropping them")
             nan_mask = ~np.isnan(y)
@@ -62,9 +74,14 @@ class TabDS(Dataset):
         return len(self.y)
 
     def __getitem__(self, idx):
-        #(X,y) data, y target, single_eval_pos
-        ret_item = tuple([self.X[idx], self.y_float[idx]]), self.y[idx], torch.tensor([])
+        # (X,y) data, y target, single_eval_pos
+        ret_item = (
+            tuple([self.X[idx], self.y_float[idx]]),
+            self.y[idx],
+            torch.tensor([]),
+        )
         return ret_item
+
 
 class TabularDataset(object):
     def __init__(
@@ -95,33 +112,33 @@ class TabularDataset(object):
         """
         assert isinstance(X, np.ndarray), "X must be an instance of np.ndarray"
         assert isinstance(y, np.ndarray), "y must be an instance of np.ndarray"
-        assert (
-            X.shape[0] == y.shape[0]
-        ), "X and y must match along their 0-th dimensions"
+        assert X.shape[0] == y.shape[0], (
+            "X and y must match along their 0-th dimensions"
+        )
         assert len(X.shape) == 2, "X must be 2-dimensional"
         assert len(y.shape) == 1, "y must be 1-dimensional"
 
         if num_instances is not None:
-            assert (
-                X.shape[0] == num_instances
-            ), f"first dimension of X must be equal to num_instances. X has shape {X.shape}"
-            assert y.shape == (
-                num_instances,
-            ), f"shape of y must be (num_instances, ). y has shape {y.shape} and num_instances={num_instances}"
+            assert X.shape[0] == num_instances, (
+                f"first dimension of X must be equal to num_instances. X has shape {X.shape}"
+            )
+            assert y.shape == (num_instances,), (
+                f"shape of y must be (num_instances, ). y has shape {y.shape} and num_instances={num_instances}"
+            )
         else:
             num_instances = X.shape[0]
 
         if num_features is not None:
-            assert (
-                X.shape[1] == num_features
-            ), f"second dimension of X must be equal to num_features. X has shape {X.shape}"
+            assert X.shape[1] == num_features, (
+                f"second dimension of X must be equal to num_features. X has shape {X.shape}"
+            )
         else:
             num_features = X.shape[1]
 
         if len(cat_idx) > 0:
-            assert (
-                max(cat_idx) <= num_features - 1
-            ), f"max index in cat_idx is {max(cat_idx)}, but num_features is {num_features}"
+            assert max(cat_idx) <= num_features - 1, (
+                f"max index in cat_idx is {max(cat_idx)}, but num_features is {num_features}"
+            )
         assert target_type in ["regression", "classification", "binary"]
 
         if target_type == "regression":
@@ -152,9 +169,9 @@ class TabularDataset(object):
 
         # Sanity check
         if self.target_type == "classification":
-            assert self.num_classes == len(
-                le.classes_
-            ), "num_classes was set incorrectly."
+            assert self.num_classes == len(le.classes_), (
+                "num_classes was set incorrectly."
+            )
 
     def cat_feature_encode(self):
         # print("cat_feature_encode...")
@@ -197,12 +214,12 @@ class TabularDataset(object):
 
         assert X_path.exists(), f"path to X does not exist: {X_path}"
         assert y_path.exists(), f"path to y does not exist: {y_path}"
-        assert (
-            metadata_path.exists()
-        ), f"path to metadata does not exist: {metadata_path}"
-        assert (
-            split_indeces_path.exists()
-        ), f"path to split indeces does not exist: {split_indeces_path}"
+        assert metadata_path.exists(), (
+            f"path to metadata does not exist: {metadata_path}"
+        )
+        assert split_indeces_path.exists(), (
+            f"path to split indeces does not exist: {split_indeces_path}"
+        )
 
         # read data
         with gzip.GzipFile(X_path, "r") as f:
@@ -242,7 +259,6 @@ class TabularDataset(object):
             json.dump(self.get_metadata(), f, indent=4)
 
 
-
 class CoresetSampler:
     def __init__(self, number_of_set_points, number_of_starting_points, rand_seed):
         self.number_of_set_points = number_of_set_points
@@ -256,7 +272,9 @@ class CoresetSampler:
         number_of_starting_points = np.clip(
             self.number_of_starting_points, None, len(features)
         )
-        start_points = self.rng.choice(len(features), number_of_starting_points, replace=False).tolist()
+        start_points = self.rng.choice(
+            len(features), number_of_starting_points, replace=False
+        ).tolist()
         approximate_distance_matrix = self._compute_batchwise_differences(
             features, features[start_points]
         )
@@ -282,11 +300,17 @@ class CoresetSampler:
 
         return np.array(coreset_indices)
 
+
 class SubsetMaker(object):
     def __init__(
-        self, subset_features, subset_rows, subset_features_method, subset_rows_method, seed = 135798642, give_full_features=False
+        self,
+        subset_features,
+        subset_rows,
+        subset_features_method,
+        subset_rows_method,
+        seed=135798642,
+        give_full_features=False,
     ):
-
         np.random.seed(seed)
 
         self.subset_features = subset_features
@@ -345,20 +369,30 @@ class SubsetMaker(object):
             X = self.feature_selector.transform(X)
             return X, y
 
-    def pca_subset(self, X, y, action='features', split='train'):
+    def pca_subset(self, X, y, action="features", split="train"):
         if split not in ["train", "val", "test"]:
-            raise ValueError("split must be 'train', 'val', or 'test'")        
+            raise ValueError("split must be 'train', 'val', or 'test'")
         if split == "train":
             self.feature_selector = PCA(n_components=self.subset_features)
             print("Fitting pca selector ...")
             timer = time.time()
             X = self.feature_selector.fit_transform(X)
-            print(f"Done fitting pca feature selector in {round(time.time() - timer, 1)} seconds")
+            print(
+                f"Done fitting pca feature selector in {round(time.time() - timer, 1)} seconds"
+            )
         else:
             X = self.feature_selector.transform(X)
         return X, y
 
-    def K_means_sketch(self, X, y, split='train', fit_first_only=False, rand_seed=0, first_only_num = 1000):
+    def K_means_sketch(
+        self,
+        X,
+        y,
+        split="train",
+        fit_first_only=False,
+        rand_seed=0,
+        first_only_num=1000,
+    ):
         if split not in ["train", "val", "test"]:
             raise ValueError("split must be 'train', 'val', or 'test'")
         if split == "train":
@@ -368,9 +402,11 @@ class SubsetMaker(object):
             X = np.ascontiguousarray(X, dtype=np.float32)
             if fit_first_only:
                 X = X[:first_only_num]
-            #start the timer
+            # start the timer
             timer = time.time()
-            self.kmeans = faiss.Kmeans(X.shape[1], self.subset_rows, niter=15+addl_steps, verbose=False)
+            self.kmeans = faiss.Kmeans(
+                X.shape[1], self.subset_rows, niter=15 + addl_steps, verbose=False
+            )
             self.kmeans.train(X)
             print(f"Done fitting kmeans in {round(time.time() - timer, 1)} seconds")
             cluster_centers = self.kmeans.centroids
@@ -382,15 +418,21 @@ class SubsetMaker(object):
         else:
             return X, y
 
-    def coreset_sketch(self, X, y, split='train', rand_seed=0, number_of_starting_points=5):
+    def coreset_sketch(
+        self, X, y, split="train", rand_seed=0, number_of_starting_points=5
+    ):
         if split not in ["train", "val", "test"]:
             raise ValueError("split must be 'train', 'val', or 'test'")
-        if split == "train":        
+        if split == "train":
             # This function returns the indices of the k samples that are a greedy coreset
-            number_of_set_points = self.subset_rows  # Number of set points for the greedy coreset
+            number_of_set_points = (
+                self.subset_rows
+            )  # Number of set points for the greedy coreset
             number_of_starting_points = number_of_starting_points  # Number of starting points for the greedy coreset
 
-            sampler = CoresetSampler(number_of_set_points, number_of_starting_points, rand_seed)
+            sampler = CoresetSampler(
+                number_of_set_points, number_of_starting_points, rand_seed
+            )
             indices = sampler._compute_greedy_coreset_indices(X)
             return X[indices], y[indices]
         else:
@@ -413,7 +455,6 @@ class SubsetMaker(object):
 
     #     forest_importances = pd.Series(result.importances_mean)
 
-
     #         self.feature_selector = RandomForestClassifier(n_estimators=200, max_depth=20, random_state=self.seed, n_jobs=-1)
     #         importances = forest.feature_importances_
     #         std = np.std([tree.feature_importances_ for tree in forest.estimators_], axis=0)
@@ -425,111 +466,128 @@ class SubsetMaker(object):
     #         X = self.feature_selector.transform(X)
     #     return X, y
 
-    def ica_subset(self, X, y, action='features', split='train'):
+    def ica_subset(self, X, y, action="features", split="train"):
         if split not in ["train", "val", "test"]:
-            raise ValueError("split must be 'train', 'val', or 'test'")        
+            raise ValueError("split must be 'train', 'val', or 'test'")
         if split == "train":
             self.feature_selector = FastICA(n_components=self.subset_features)
             print("Fitting ica selector ...")
             timer = time.time()
             X = self.feature_selector.fit_transform(X)
-            print(f"Done fitting ica feature selector in {round(time.time() - timer, 1)} seconds")
+            print(
+                f"Done fitting ica feature selector in {round(time.time() - timer, 1)} seconds"
+            )
         else:
             X = self.feature_selector.transform(X)
         return X, y
 
-
-    def kpca_subset(self, X, y, action='features', split='train'):
+    def kpca_subset(self, X, y, action="features", split="train"):
         if split not in ["train", "val", "test"]:
-            raise ValueError("split must be 'train', 'val', or 'test'")        
+            raise ValueError("split must be 'train', 'val', or 'test'")
         if split == "train":
-            self.feature_selector = KernelPCA(n_components=self.subset_features, kernel='rbf', gamma=15)
+            self.feature_selector = KernelPCA(
+                n_components=self.subset_features, kernel="rbf", gamma=15
+            )
             print("Fitting kpca selector ...")
             timer = time.time()
             X = self.feature_selector.fit_transform(X)
-            print(f"Done fitting kpca feature selector in {round(time.time() - timer, 1)} seconds")
+            print(
+                f"Done fitting kpca feature selector in {round(time.time() - timer, 1)} seconds"
+            )
         else:
             X = self.feature_selector.transform(X)
         return X, y
 
-    def isomap_subset(self, X, y, action='features', split='train'):
+    def isomap_subset(self, X, y, action="features", split="train"):
         if split not in ["train", "val", "test"]:
-            raise ValueError("split must be 'train', 'val', or 'test'")        
+            raise ValueError("split must be 'train', 'val', or 'test'")
         if split == "train":
             self.feature_selector = Isomap(n_components=self.subset_features)
             print("Fitting isomap selector ...")
             timer = time.time()
             X = self.feature_selector.fit_transform(X)
-            print(f"Done fitting isomaps feature selector in {round(time.time() - timer, 1)} seconds")
+            print(
+                f"Done fitting isomaps feature selector in {round(time.time() - timer, 1)} seconds"
+            )
         else:
             X = self.feature_selector.transform(X)
         return X, y
 
-
-    def sparse_random_projection_subset(self, X, y, action='features', split='train'):
+    def sparse_random_projection_subset(self, X, y, action="features", split="train"):
         if split not in ["train", "val", "test"]:
-            raise ValueError("split must be 'train', 'val', or 'test'")        
+            raise ValueError("split must be 'train', 'val', or 'test'")
         if split == "train":
-            self.feature_selector = SparseRandomProjection(n_components=self.subset_features)
+            self.feature_selector = SparseRandomProjection(
+                n_components=self.subset_features
+            )
             print("Fitting sparse rp selector ...")
             timer = time.time()
             X = self.feature_selector.fit_transform(X)
-            print(f"Done fitting sparse feature selector in {round(time.time() - timer, 1)} seconds")
+            print(
+                f"Done fitting sparse feature selector in {round(time.time() - timer, 1)} seconds"
+            )
         else:
             X = self.feature_selector.transform(X)
         return X, y
 
-
-    def locally_linear_embedding_subset(self, X, y, action='features', split='train'):
+    def locally_linear_embedding_subset(self, X, y, action="features", split="train"):
         if split not in ["train", "val", "test"]:
-            raise ValueError("split must be 'train', 'val', or 'test'")        
+            raise ValueError("split must be 'train', 'val', or 'test'")
         if split == "train":
-            self.feature_selector = LocallyLinearEmbedding(n_components=self.subset_features)
+            self.feature_selector = LocallyLinearEmbedding(
+                n_components=self.subset_features
+            )
             print("Fitting lle selector ...")
             timer = time.time()
             X = self.feature_selector.fit_transform(X)
-            print(f"Done fitting pca feature selector in {round(time.time() - timer, 1)} seconds")
+            print(
+                f"Done fitting pca feature selector in {round(time.time() - timer, 1)} seconds"
+            )
         else:
             X = self.feature_selector.transform(X)
         return X, y
 
-
-    def umap_subset(self, X, y, action='features', split='train'):
+    def umap_subset(self, X, y, action="features", split="train"):
         if split not in ["train", "val", "test"]:
-            raise ValueError("split must be 'train', 'val', or 'test'")        
+            raise ValueError("split must be 'train', 'val', or 'test'")
         if split == "train":
             self.feature_selector = umap.UMAP(n_components=self.subset_features)
             print("Fitting umpa selector ...")
             timer = time.time()
             X = self.feature_selector.fit_transform(X)
-            print(f"Done fitting pca feature selector in {round(time.time() - timer, 1)} seconds")
+            print(
+                f"Done fitting pca feature selector in {round(time.time() - timer, 1)} seconds"
+            )
         else:
             X = self.feature_selector.transform(X)
         return X, y
 
-    def tsne_subset(self, X, y, action='features', split='train'):
+    def tsne_subset(self, X, y, action="features", split="train"):
         if split not in ["train", "val", "test"]:
-            raise ValueError("split must be 'train', 'val', or 'test'")        
+            raise ValueError("split must be 'train', 'val', or 'test'")
         if split == "train":
             self.feature_selector = TSNE(n_components=self.subset_features)
             print("Fitting tsne selector ...")
             timer = time.time()
             X = self.feature_selector.fit_transform(X)
-            print(f"Done fitting tsne feature selector in {round(time.time() - timer, 1)} seconds")
+            print(
+                f"Done fitting tsne feature selector in {round(time.time() - timer, 1)} seconds"
+            )
         else:
             X = self.feature_selector.transform(X)
         return X, y
-     
 
-    def pca_subset_white(self, X, y, action='features', split='train'):
+    def pca_subset_white(self, X, y, action="features", split="train"):
         if split not in ["train", "val", "test"]:
-            raise ValueError("split must be 'train', 'val', or 'test'")        
+            raise ValueError("split must be 'train', 'val', or 'test'")
         if split == "train":
             self.feature_selector = PCA(n_components=self.subset_features, whiten=True)
             print("Fitting pca white selector ...")
             timer = time.time()
             X = self.feature_selector.fit_transform(X)
-            print(f"Done fitting pca feature selector in {round(time.time() - timer, 1)} seconds")
+            print(
+                f"Done fitting pca feature selector in {round(time.time() - timer, 1)} seconds"
+            )
         else:
             X = self.feature_selector.transform(X)
         return X, y
@@ -554,7 +612,7 @@ class SubsetMaker(object):
         # print('setting numpy seed to', seed)
         # np.random.seed(seed)
         if self.give_full_features:
-                pass
+            pass
         else:
             if X.shape[1] > self.subset_features > 0:
                 print(
@@ -569,28 +627,32 @@ class SubsetMaker(object):
                         X, y, action="features", split=split
                     )
                 elif self.subset_features_method == "pca":
-                    X, y = self.pca_subset(X, y, action='features', split=split)   
+                    X, y = self.pca_subset(X, y, action="features", split=split)
                 elif self.subset_features_method == "pca_white":
-                    X, y = self.pca_subset_white(X, y, action='features', split=split)   
+                    X, y = self.pca_subset_white(X, y, action="features", split=split)
                 elif self.subset_features_method == "ica":
-                    X, y = self.ica_subset(X, y, action='features', split=split) 
+                    X, y = self.ica_subset(X, y, action="features", split=split)
                 elif self.subset_features_method == "kpca":
-                    X, y = self.kpca_subset(X, y, action='features', split=split)      
+                    X, y = self.kpca_subset(X, y, action="features", split=split)
                 elif self.subset_features_method == "isomap":
-                    X, y = self.isomap_subset(X, y, action='features', split=split)      
+                    X, y = self.isomap_subset(X, y, action="features", split=split)
                 elif self.subset_features_method == "sparse_random_projection":
-                    X, y = self.sparse_random_projection_subset(X, y, action='features', split=split)         
+                    X, y = self.sparse_random_projection_subset(
+                        X, y, action="features", split=split
+                    )
                 elif self.subset_features_method == "locally_linear_embedding":
-                    X, y = self.locally_linear_embedding_subset(X, y, action='features', split=split)   
+                    X, y = self.locally_linear_embedding_subset(
+                        X, y, action="features", split=split
+                    )
                 elif self.subset_features_method == "umap":
-                    X, y = self.umap_subset(X, y, action='features', split=split)   
+                    X, y = self.umap_subset(X, y, action="features", split=split)
                 elif self.subset_features_method == "tsne":
-                    X, y = self.tsne_subset(X, y, action='features', split=split)                                      
+                    X, y = self.tsne_subset(X, y, action="features", split=split)
                 else:
                     raise ValueError(
                         f"subset_features_method not recognized: {self.subset_features_method}"
                     )
-                
+
         if X.shape[0] > self.subset_rows > 0:
             print(f"making {self.subset_rows}-sized subset of {X.shape[0]} rows ...")
 
@@ -599,14 +661,15 @@ class SubsetMaker(object):
             elif self.subset_rows_method == "first":
                 X, y = self.first_subset(X, y, action=["rows"])
             elif self.subset_rows_method == "kmeans":
-                X, y = self.K_means_sketch(X, y, split=split, fit_first_only=False, rand_seed=0)
+                X, y = self.K_means_sketch(
+                    X, y, split=split, fit_first_only=False, rand_seed=0
+                )
             elif self.subset_rows_method == "coreset":
                 X, y = self.coreset_sketch(X, y, split=split, rand_seed=0)
             else:
                 raise ValueError(
                     f"subset_rows_method not recognized: {self.subset_rows_method}"
                 )
-
 
         return X, y
 
@@ -615,18 +678,13 @@ import numpy as np
 import pandas as pd
 
 
-def data_split(X, y, nan_mask): # indices
-    x_d = {
-        'data': X,
-        'mask': nan_mask.values
-    }
+def data_split(X, y, nan_mask):  # indices
+    x_d = {"data": X, "mask": nan_mask.values}
 
-    if x_d['data'].shape != x_d['mask'].shape:
-        raise 'Shape of data not same as that of nan mask!'
+    if x_d["data"].shape != x_d["mask"].shape:
+        raise "Shape of data not same as that of nan mask!"
 
-    y_d = {
-        'data': y.reshape(-1, 1)
-    }
+    y_d = {"data": y.reshape(-1, 1)}
     return x_d, y_d
 
 
@@ -636,8 +694,10 @@ def data_prep(X, y):
     X, y = data_split(X, y, nan_mask)
     return X, y
 
+
 def get_shuffle_index(X):
     return np.random.permutation(X.shape[0])
+
 
 def process_data(
     dataset,
@@ -650,7 +710,6 @@ def process_data(
     impute=True,
     args=None,
 ):
-
     X_train, y_train = dataset.X[train_index], dataset.y[train_index]
     X_val, y_val = dataset.X[val_index], dataset.y[val_index]
     X_test, y_test = dataset.X[test_index], dataset.y[test_index]
@@ -680,8 +739,12 @@ def process_data(
             X_test[:, num_idx[fully_nan_num_idcs]] = 0
 
         # Impute numerical and categorical features
-        numeric_transformer = Pipeline(steps=[("imputer", SimpleImputer(strategy="mean"))])
-        categorical_transformer = Pipeline(steps=[("imputer", SimpleImputer(strategy="most_frequent"))])
+        numeric_transformer = Pipeline(
+            steps=[("imputer", SimpleImputer(strategy="mean"))]
+        )
+        categorical_transformer = Pipeline(
+            steps=[("imputer", SimpleImputer(strategy="most_frequent"))]
+        )
         preprocessor = ColumnTransformer(
             transformers=[
                 ("num", numeric_transformer, num_idx),
@@ -745,7 +808,7 @@ def process_data(
                 args.subset_features_method,
                 args.subset_rows_method,
                 seed=args.rand_seed,
-                give_full_features = args.summerize_after_prep, #if we summerize after prep, we don't want to summerize here
+                give_full_features=args.summerize_after_prep,  # if we summerize after prep, we don't want to summerize here
             )
         X_train, y_train = subset_maker.make_subset(
             X_train,
@@ -772,47 +835,52 @@ def process_data(
         "data_test": (X_test, y_test),
     }
 
+
 def SummarizeAfter(X, X_val, X_test, y, y_val, y_test, num_features, args):
+    SM = real.SubsetMaker(
+        args.subset_features,
+        args.subset_rows,  # subset_rows = 10^8 ablate this part here
+        args.subset_features_method,
+        args.subset_rows_method,  # args.subset_rows_method is not used anyhow
+        seed=args.rand_seed,
+    )
 
-        SM = real.SubsetMaker(
-                args.subset_features,
-                args.subset_rows, #subset_rows = 10^8 ablate this part here
-                args.subset_features_method,
-                args.subset_rows_method, #args.subset_rows_method is not used anyhow
-                seed=args.rand_seed,
-            )
+    X, y = SM.make_subset(
+        X,
+        y,
+        split="train",
+        seed=args.rand_seed,
+    )
 
-        X, y = SM.make_subset(
-            X,
-            y,
-            split="train",
-            seed=args.rand_seed,
-        )
+    X_val, y = SM.make_subset(
+        X_val,
+        y,
+        split="val",
+        seed=args.rand_seed,
+    )
 
-        X_val, y = SM.make_subset(
-            X_val, 
-            y,
-            split="val",
-            seed=args.rand_seed,
+    X_test, y = SM.make_subset(
+        X_test,
+        y,
+        split="test",
+        seed=args.rand_seed,
+    )
+    if isinstance(X, torch.Tensor):
+        return X.to(torch.float32), X_val.to(torch.float32), X_test.to(torch.float32)
+    elif isinstance(X, np.ndarray):
+        return (
+            torch.from_numpy(X).to(torch.float32),
+            torch.from_numpy(X_val).to(torch.float32),
+            torch.from_numpy(X_test).to(torch.float32),
         )
-            
-        X_test, y = SM.make_subset(
-            X_test, 
-            y,
-            split="test",
-            seed=args.rand_seed,
-        )
-        if isinstance(X, torch.Tensor):
-            return X.to(torch.float32), X_val.to(torch.float32), X_test.to(torch.float32)
-        elif isinstance(X, np.ndarray):
-            return torch.from_numpy(X).to(torch.float32), torch.from_numpy(X_val).to(torch.float32), torch.from_numpy(X_test).to(torch.float32)
-        else:
-            raise Exception(f"X is {type(X)}, not a tensor or numpy array")
+    else:
+        raise Exception(f"X is {type(X)}, not a tensor or numpy array")
+
 
 def loop_translate(a, my_dict):
     new_a = np.empty(a.shape)
     if a.ndim == 1:
-        for i,elem in enumerate(a):
+        for i, elem in enumerate(a):
             new_a[i] = my_dict.get(elem)
     elif a.ndim == 2:
         # print("In loop translate: ")
@@ -824,85 +892,121 @@ def loop_translate(a, my_dict):
         if isinstance(new_a[0], np.ndarray):
             new_a = np.stack(new_a, axis=1)
         else:
-            #torch tensor
+            # torch tensor
             new_a = torch.stack(new_a, axis=1)
         # print("new_a shape: ", new_a.shape)
         # print("new_a: ", new_a[:5, ...])
     return new_a
 
-def preprocess_input(eval_xs, preprocess_transform, summerize_after_prep, args, is_train=False):
 
-    if preprocess_transform != 'none':
-        if preprocess_transform == 'power' or preprocess_transform == 'power_all':
+def preprocess_input(
+    eval_xs, preprocess_transform, summerize_after_prep, args, is_train=False
+):
+    if preprocess_transform != "none":
+        if preprocess_transform == "power" or preprocess_transform == "power_all":
             pt = PowerTransformer(standardize=True)
-        elif preprocess_transform == 'quantile' or preprocess_transform == 'quantile_all':
-            pt = QuantileTransformer(output_distribution='normal')
-        elif preprocess_transform == 'robust' or preprocess_transform == 'robust_all':
+        elif (
+            preprocess_transform == "quantile" or preprocess_transform == "quantile_all"
+        ):
+            pt = QuantileTransformer(output_distribution="normal")
+        elif preprocess_transform == "robust" or preprocess_transform == "robust_all":
             pt = RobustScaler(unit_variance=True)
     eval_position = eval_xs.shape[0]
     eval_xs = normalize_data(eval_xs, normalize_positions=eval_position)
 
     if is_train:
         # Removing empty features
-        args.sel = [len(torch.unique(eval_xs[:1000, col])) > 1 for col in range(eval_xs.shape[1])]
-    
+        args.sel = [
+            len(torch.unique(eval_xs[:1000, col])) > 1
+            for col in range(eval_xs.shape[1])
+        ]
+
     eval_xs = eval_xs[:, args.sel]
 
-    warnings.simplefilter('error')
-    if preprocess_transform != 'none':
+    warnings.simplefilter("error")
+    if preprocess_transform != "none":
         eval_xs = eval_xs.cpu().numpy()
         feats = set(range(eval_xs.shape[1]))
         for col in feats:
             try:
-                pt.fit(eval_xs[0:eval_position, col:col + 1])
-                trans = pt.transform(eval_xs[:, col:col + 1])
-                eval_xs[:, col:col + 1] = trans
+                pt.fit(eval_xs[0:eval_position, col : col + 1])
+                trans = pt.transform(eval_xs[:, col : col + 1])
+                eval_xs[:, col : col + 1] = trans
             except:
                 pass
         eval_xs = torch.tensor(eval_xs).float()
-    warnings.simplefilter('default')
+    warnings.simplefilter("default")
 
     eval_xs = eval_xs.unsqueeze(1)
 
     eval_xs = remove_outliers(eval_xs, normalize_positions=eval_position)
     # Rescale X
-    #hard-coded
+    # hard-coded
     max_features = 100
 
     if summerize_after_prep:
-        eval_xs = normalize_by_used_features_f(eval_xs, min(eval_xs.shape[-1],max_features), max_features,
-                                            normalize_with_sqrt=False)        
+        eval_xs = normalize_by_used_features_f(
+            eval_xs,
+            min(eval_xs.shape[-1], max_features),
+            max_features,
+            normalize_with_sqrt=False,
+        )
     else:
-        eval_xs = normalize_by_used_features_f(eval_xs, eval_xs.shape[-1], max_features,
-                                                normalize_with_sqrt=False)
+        eval_xs = normalize_by_used_features_f(
+            eval_xs, eval_xs.shape[-1], max_features, normalize_with_sqrt=False
+        )
 
     eval_xs = eval_xs.squeeze(1)
     return eval_xs
 
-def get_train_dataloader(ds, bptt=1000, shuffle=True, num_workers=1, drop_last=True, agg_k_grads=1, not_zs=True):
+
+def get_train_dataloader(
+    ds,
+    bptt=1000,
+    shuffle=True,
+    num_workers=1,
+    drop_last=True,
+    agg_k_grads=1,
+    not_zs=True,
+):
+    dl = DataLoader(
+        ds,
+        batch_size=bptt,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        drop_last=drop_last,
+    )
+    if len(dl) == 0:
+        ds_len = len(ds)
+        if not_zs:
+            n_batches = 10
+        else:
+            n_batches = 1
+        bptt = int(ds_len // n_batches)
         dl = DataLoader(
-            ds, batch_size=bptt, shuffle=shuffle, num_workers=num_workers, drop_last=drop_last,
+            ds,
+            batch_size=bptt,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            drop_last=drop_last,
         )
-        if len(dl) == 0:
-            ds_len = len(ds)
-            if not_zs:
-                n_batches = 10
-            else:
-                n_batches = 1
-            bptt = int(ds_len // n_batches)
-            dl = DataLoader(
-                ds, batch_size=bptt, shuffle=shuffle, num_workers=num_workers, drop_last=drop_last,
-            )
-        while len(dl) % agg_k_grads != 0:
-            bptt += 1
-            dl = DataLoader(
-                ds, batch_size=bptt, shuffle=shuffle, num_workers=num_workers, drop_last=drop_last,
-            )
-            # raise ValueError(f'Number of batches {len(dl)} not divisible by {agg_k_grads}, please modify aggregation factor.')
-        return dl, bptt
+    while len(dl) % agg_k_grads != 0:
+        bptt += 1
+        dl = DataLoader(
+            ds,
+            batch_size=bptt,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            drop_last=drop_last,
+        )
+        # raise ValueError(f'Number of batches {len(dl)} not divisible by {agg_k_grads}, please modify aggregation factor.')
+    return dl, bptt
+
 
 def get_subset_dl(extra_prior_kwargs_dict, val_dl):
-    SMALL_VAL_SIZE = min(extra_prior_kwargs_dict.get('val_subset_size', 10), len(val_dl.dataset))
+    SMALL_VAL_SIZE = min(
+        extra_prior_kwargs_dict.get("val_subset_size", 10), len(val_dl.dataset)
+    )
     if SMALL_VAL_SIZE > len(val_dl.dataset):
         # val_dl_small = None
         return val_dl
@@ -910,5 +1014,10 @@ def get_subset_dl(extra_prior_kwargs_dict, val_dl):
         # val_dl_small = copy.deepcopy(val_dl)
         # subset_indices = np.random.choice(len(val_dl.dataset), size=SMALL_VAL_SIZE, replace=False)
         val_dl_small_ds = Subset(val_dl.dataset, np.arange(SMALL_VAL_SIZE))
-        val_dl_small_dl = DataLoader(val_dl_small_ds, batch_size=val_dl.batch_size, shuffle=False, num_workers=val_dl.num_workers)
+        val_dl_small_dl = DataLoader(
+            val_dl_small_ds,
+            batch_size=val_dl.batch_size,
+            shuffle=False,
+            num_workers=val_dl.num_workers,
+        )
         return val_dl_small_dl
