@@ -129,7 +129,9 @@ def real_data_eval_out(
     results = dict()
     warnings.filterwarnings("ignore")
     results["Eval_Time"] = np.round(time.time() - start_time, 3).item()
-    results["Accuracy"] = np.round(accuracy_score(targets, predictions), 3).item()
+    accur = np.round(accuracy_score(targets, predictions), 3).item()
+    print(accur)
+    results["Accuracy"] = accur
     try:
         results["Log_Loss"] = np.round(
             log_loss(targets, outputs, labels=np.arange(num_classes_local)), 3
@@ -2265,3 +2267,102 @@ if __name__ == "__main__":
         pos_encoder_generator=pos_encoder_generator,
         **args.__dict__,
     )
+
+def real_data_eval(
+    r_model,
+    invert_perm_map,
+    cl=1000,
+    train_data=None,
+    val_dl=None,
+    softmax_temperature=torch.log(torch.tensor([0.8])),
+    device="cuda"
+):
+    start_time = time.time()
+    td = copy.deepcopy(train_data)
+    num_classes_local = len(torch.unique(td[1]))
+    td[0] = td[0][:cl, ...]
+    td[1] = td[1][:cl, ...]
+    single_eval_pos = len(td[0])
+    softmax_temperature = softmax_temperature.to(device)
+    # print("In real data eval, eval set size: ", len(val_dl.dataset))
+    with torch.inference_mode():
+        # correct = 0
+        # total = len(val_dl.dataset)
+        prediction_list = []
+        target_list = []
+        output_list = []
+        for batch, (data, targets, _) in enumerate(val_dl):
+            if True:
+                # Extra safeguard against test set contamination, permute label order before passing into model
+                data_temp_idx = torch.randperm(data[1].nelement())
+                data[1] = data[1].view(-1)[data_temp_idx].view(data[1].size())
+
+            batch_data = tuple([
+                torch.cat((td[0], data[0]), dim=0).to(torch.float32),
+                torch.cat((td[1], data[1]), dim=0).to(torch.float32),
+            ])
+            output = r_model(
+                tuple(e.to(device) if torch.is_tensor(e) else e for e in batch_data)
+                if isinstance(batch_data, tuple)
+                else batch_data.to(device),
+                single_eval_pos=single_eval_pos,
+            )
+            # invert permutation of labels
+            new_output = loop_translate(output, invert_perm_map)
+            output = new_output
+            output = output[:, 0:num_classes_local] / torch.exp(softmax_temperature)
+            output = torch.nn.functional.softmax(output, dim=-1)
+            output_list.append(output)
+            _, predicted = torch.max(output.cpu().data, 1)
+            prediction_list.append(predicted)
+            target_list.append(targets)
+        outputs = torch.cat(output_list, dim=0).cpu().numpy()
+        predictions = torch.cat(prediction_list, dim=0).cpu().numpy()
+        targets = torch.cat(target_list, dim=0).cpu().numpy()
+        # print("In real data eval, Targets: ", targets[:20])
+
+    results = dict()
+    warnings.filterwarnings("ignore")
+    results["Eval_Time"] = np.round(time.time() - start_time, 3).item()
+    accur = np.round(accuracy_score(targets, predictions), 3).item()
+    print(accur)
+    results["Accuracy"] = accur
+    try:
+        results["Log_Loss"] = np.round(
+            log_loss(targets, outputs, labels=np.arange(num_classes_local)), 3
+        ).item()
+    except Exception as e:
+        if False:
+            print("Error calculating log loss: ", e)
+        results["Log_Loss"] = 0.0
+    results["F1_Weighted"] = np.round(
+        f1_score(targets, predictions, average="weighted"), 3
+    ).item()
+    results["F1_Macro"] = np.round(
+        f1_score(targets, predictions, average="macro"), 3
+    ).item()
+    try:
+        if num_classes_local == 2:
+            results["ROC_AUC"] = np.round(
+                roc_auc_score(
+                    targets, outputs[:, 1], labels=np.arange(num_classes_local)
+                ),
+                3,
+            ).item()
+        else:
+            results["ROC_AUC"] = np.round(
+                roc_auc_score(
+                    targets,
+                    outputs,
+                    labels=np.arange(num_classes_local),
+                    multi_class="ovr",
+                ),
+                3,
+            ).item()
+    except Exception as e:
+        print("Error calculating ROC AUC: ", e)
+        results["ROC_AUC"] = 0.0
+
+    warnings.filterwarnings("default")
+
+    return results, outputs, targets

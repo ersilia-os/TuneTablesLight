@@ -955,4 +955,4 @@ def get_train_dataset(
         dl, val_dl, test_dl, bptt, data_for_fitting = make_dataloaders(
             bptt=bptt, not_zs=not_zs
         )
-        return dl, val_dl, test_dl, bptt, data_for_fitting
+        return dl, val_dl, test_dl, bptt, data_for_fitting, invert_perm_map

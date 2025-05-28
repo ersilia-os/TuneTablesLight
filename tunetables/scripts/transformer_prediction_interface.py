@@ -16,7 +16,7 @@ from tunetables.train_loop import reload_config, train_function
 from tunetables.utils import normalize_data, to_ranking_low_mem, remove_outliers
 from tunetables.utils import NOP, normalize_by_used_features_f
 from tunetables.scripts.model_builder import load_model, load_model_only_inference, get_model
-from tunetables.train import real_data_eval_out
+from tunetables.train import real_data_eval_out, real_data_eval
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
 
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -245,7 +245,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
             )
         if X.shape[0] > 1024 and not overwrite_warning:
             raise ValueError(
-                "WARNING: TabPFN is not made for datasets with a trainingsize > 1024. Prediction might take a while, be less reliable. We advise not to run datasets > 10k samples, which might lead to your machine crashing (due to quadratic memory scaling of TabPFN). Please confirm you want to run by passing overwrite_warning=True to the fit function."
+                "WARNING: TabPFN is not made for datasets with a trainingsize > 1024. \Prediction might take a while, be less reliable. We advise not to run datasets > 10k samples, which might lead to your machine crashing (due to quadratic memory scaling of TabPFN). Please confirm you want to run by passing overwrite_warning=True to the fit function."
             )
 
         return self
@@ -677,7 +677,7 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
         args.resume = "../models/prior_diff_real_checkpoint_n_0_epoch_42.cpkt"
         args.save_path = "./logs"
         args.prior_type = "real"
-        args.data_path = ""  #'/home/benfeuer/TabPFN-pt/tabpfn/data/openml__colic__27'
+        args.data_path = ""  
         args.prompt_tuning = True
         args.tuned_prompt_size = 10
         args.tuned_prompt_label_balance = "equal"
@@ -741,11 +741,11 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
         assert len(y.shape) == 1, "y must be a 1D array"
 
         if self.only_inference:
-            model, c = load_model_only_inference(
+            model, _ = load_model_only_inference(
                 self.base_path, self.model_file, self.device, prefix_size=10, n_classes=2
             )
             self.model = model[2]
-            dl, val_dl, test_dl, bptt, self.data_for_fitting = get_model(
+            _, _, _, _, self.data_for_fitting, self.perm_map = get_model(
                 self.config,
                 self.config["device"],
                 should_train=True,
@@ -809,8 +809,244 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
             val_dl=test_loader,
             cl=self.eval_pos,
             train_data=self.data_for_fitting,
-            return_probs=True,
+            return_probs=True
         )
+        print(out)
         return out[1]
 
 
+
+
+import joblib
+import json
+
+class TuneTablesClassifier2(BaseEstimator, ClassifierMixin):
+    def __init__(self, prefitted_only=False, device="cpu", user_args=None):
+
+        self.prefitted_only = prefitted_only
+        self.pretrained_model_file = os.path.join("checkpoints")
+
+        self.device = device
+        self.model_file = self.pretrained_model_file
+        self.base_path = pathlib.Path(__file__).parent.parent.resolve()
+
+        class Args:
+            pass
+
+        args = Args()
+
+        args = self.get_default_config(args)
+
+        if user_args is not None:
+            for k, v in user_args.items():
+                setattr(args, k, v)
+
+        self.config, self.model_string = reload_config(longer=1, args=args)
+        self.config["wandb_log"] = False
+
+        import ConfigSpace
+
+        for k, v in self.config.items():
+            if isinstance(v, ConfigSpace.hyperparameters.CategoricalHyperparameter):
+                self.config[k] = v.default_value
+
+    def get_default_config(self, args):
+        args.resume = "../models/prior_diff_real_checkpoint_n_0_epoch_42.cpkt"
+        args.save_path = "./logs"
+        args.prior_type = "real"
+        args.data_path = ""  
+        args.prompt_tuning = True
+        args.tuned_prompt_size = 10
+        args.tuned_prompt_label_balance = "equal"
+        args.lr = 0.1
+        args.batch_size = 4
+        args.bptt = 1152
+        args.uniform_bptt = False
+        args.seed = 0
+        args.early_stopping = 5
+        args.epochs = 10
+        args.num_eval_fitting_samples = 1000
+        args.split = 0
+        args.boosting = False
+        args.bagging = False
+        args.bptt_search = False
+        args.workers = 4
+        args.val_subset_size = 1000000
+        args.subset_features = 100
+        args.subsampling = 0
+        args.rand_init_ensemble = False
+        args.ensemble_lr = 0.5
+        args.ensemble_size = 5
+        args.reseed_data = False
+        args.aggregate_k_gradients = 1
+        args.average_ensemble = False
+        args.permute_feature_position_in_ensemble = False
+        args.concat_method = ""
+        args.save_every_k_epochs = 2
+        args.validation_period = 3
+        args.wandb_name = "tabpfn_pt_airlines"
+        args.wandb_log = False
+        args.wandb_group = "openml__colic__27_pt10_rdq_0_split_0"
+        args.wandb_project = "tabpfn-pt"
+        args.wandb_entity = "nyu-dice-lab"
+        args.subset_features_method = "pca"
+        args.pad_features = True
+        args.do_preprocess = True
+        args.zs_eval_ensemble = 0
+        args.min_batches_per_epoch = 1
+        args.keep_topk_ensemble = 0
+        args.topk_key = "Val_Accuracy"
+        args.max_time = 36000
+        args.preprocess_type = "none"
+        args.optuna_objective = "Val_Accuracy"
+        args.verbose = True
+        args.shuffle_every_epoch = False
+        args.max_num_classes = 10
+        args.real_data_qty = 0
+        args.summerize_after_prep = False
+        args.kl_loss = False
+        args.private_model = False
+        args.private_data = False
+        args.edg = ["50", "1e-4", "1.2"]
+
+        return args
+
+    def _fit_only_prefitted(self, X, y):
+
+        model, _ = load_model_only_inference(
+            self.base_path, self.model_file, self.device, prefix_size=10, n_classes=2
+        )
+        model = model[2]
+        _, _, _, _, data_for_fitting, perm_map = get_model(
+            self.config,
+            self.config["device"],
+            should_train=True,
+            state_dict=self.config["state_dict"],
+            is_wrapper=True,
+            x_wrapper=X,
+            y_wrapper=y,
+            cat_idx=[],
+            get_dataset=True
+        )
+
+        return model, data_for_fitting, perm_map
+
+    def _fit(self, X, y):
+
+        model, data_for_fitting, _ = train_function(
+            self.config.copy(),
+            0,
+            self.model_string,
+            is_wrapper=True,
+            x_wrapper=X,
+            y_wrapper=y,
+            cat_idx=[],
+        )
+
+        return model, data_for_fitting
+        
+
+    def fit(self, X, y):
+
+        x = X
+        assert isinstance(x, np.ndarray), "x must be a numpy array"
+        assert isinstance(y, np.ndarray), "x must be a numpy array"
+        assert len(x.shape) == 2, "x must be a 2D array (samples, features)"
+        assert len(y.shape) == 1, "y must be a 1D array"
+        
+        if not self.prefitted_only:
+            self.model, self.data_for_fitting = self._fit(X, y)
+        else:
+            self.model, self.data_for_fitting, _ = self._fit_only_prefitted(X, y)
+        
+        self.eval_pos = self.data_for_fitting[0].shape[0]
+        print(f"Evaluation position: {self.eval_pos}")
+        self.num_classes = len(np.unique(y))
+
+        self._x_train = x
+        self._y_train = y
+
+    def predict_proba(self, X):
+
+        x = X
+
+        cat_idx = []
+        
+        assert isinstance(x, np.ndarray), "x must be a numpy array"
+
+        self.model, self.data_for_fitting, self.perm_map = self._fit_only_prefitted(self._x_train, self._y_train)
+
+        self.config["epochs"] = 0 
+        _, _, test_loader = train_function(
+            self.config,
+            0,
+            self.model_string,
+            is_wrapper=True,
+            x_wrapper=x,
+            y_wrapper=np.random.randint(self.num_classes, size=x.shape[0]),
+            cat_idx=cat_idx,
+        )
+        out = real_data_eval_out(
+            r_model=self.model,
+            val_dl=test_loader,
+            cl=self.eval_pos,
+            train_data=self.data_for_fitting,
+            return_probs=True
+        )
+        print(out)
+        return out[1]
+
+    def save_model(self, model_dir: str):
+        args = self.args
+        config = self.config
+        other_metadata = {
+            "prefitted_only": self.prefitted_only,
+            "model_string": self.model_string,
+            "eval_pos": self.eval_pos,
+            "num_classes": self.num_classes,
+            "device": self.device,
+            "pretrained_model_file": self.pretrained_model_file
+        }
+
+        data = {
+            "x_train": self._x_train,
+            "y_train": self._y_train,
+            "data_for_fitting": self.data_for_fitting
+        }
+        with open(os.path.join(model_dir, "metadata.json"), "w") as f:
+            json.dump({"args": args, "config": config, "other": other_metadata}, f)
+        joblib.dump(os.path.join(model_dir, "training_data.joblib"), data)
+        
+        logs_model_file = "PATH TO LAST MODEL CHECKPOINT"
+        persistent_model_file = os.path.join(model_dir, "model.ckpt")
+        os.copy(logs_model_file, persistent_model_file)
+
+
+    @classmethod
+    def load_model(cls, model_dir: str):
+        obj = cls()
+        with open(os.path.join(model_dir, "metadata.json"), "r") as f:
+            metadata = json.load(f)
+        obj.args = metadata["args"]
+        obj.config = metadata["config"]
+        obj.model_string = metadata["other"]["model_string"]
+        obj.device = metadata["other"]["device"]
+        # TODO put the rest!!!!
+        data = joblib.load(os.path.join(model_dir, "training_data.joblib"))
+        obj._x_train = data["x_train"]
+        obj._y_train = data["y_train"]
+        obj.data_for_fitting = data["data_for_fitting"]
+
+        obj.model_file = os.path.join(model_dir, "model.ckpt")
+        return obj
+
+
+if __name__ == "__main__":
+
+    model = TuneTablesClassifier2(prefitted_only=True)
+
+    model.fit(X,y)
+    model.save_model("my_model")
+
+    model = TuneTablesClassifier2.load_model("my_model")
+    y_hat = model.predict_proba(X)[:, 1]
