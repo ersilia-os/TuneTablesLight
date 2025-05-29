@@ -31,7 +31,9 @@ classifiers = [
 
 [tool.hatch.build]
 exclude = [
+  "*.cpkt",
   "tunetables/data/*",
+  "tunetables/logs/*",
   "tunetables/config/*",
   "tunetables/wandb/*",
   "tunetables/datasets/*.pickle",
