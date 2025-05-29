@@ -4,7 +4,7 @@ import subprocess as sp
 import os
 import torch
 import tunetables.encoders as encoders
-from tunetables.utils import init_dist, seed_all, EmbeddingConcatenator
+from tunetables.utils import init_dist, seed_all
 from torch.utils.data import DataLoader
 from tunetables.transformer import TransformerModel
 from tunetables.utils import (
@@ -339,7 +339,7 @@ def get_model(
         return new_get_batch
 
     if config["prior_type"] == "real":
-        from priors.real import TabularDataset
+        from tunetables.priors.real import TabularDataset
 
         if is_wrapper:
             num_classes = len(np.unique(y_wrapper))
@@ -348,10 +348,10 @@ def get_model(
             total_data_points = len(x_wrapper)
             indices = np.arange(total_data_points)
 
-            if config["epochs"] == 0:  # only process test_loader
+            if config["epochs"] == 0:  
                 train_indices = indices
                 val_indices = indices
-                num_classes = 2  # we just want the dataloader
+                num_classes = 2 
             else:
                 np.random.shuffle(indices)
                 train_size = int(0.85 * total_data_points)
@@ -377,9 +377,7 @@ def get_model(
             prior_hyperparameters = {}
             use_style = False
 
-    # Priors == DataLoaders (synthetic)
     if config["prior_type"] == "prior_bag":
-        # Prior bag combines priors
         get_batch_gp = make_get_batch(priors.fast_gp)
         get_batch_mlp = make_get_batch(priors.mlp)
         if "flexible" in config and config["flexible"]:
