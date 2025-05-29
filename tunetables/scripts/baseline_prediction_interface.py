@@ -12,19 +12,6 @@ def baseline_predict(
     max_time=300,
     **kwargs,
 ):
-    """
-    Baseline prediction interface.
-    :param metric_function:
-    :param eval_xs:
-    :param eval_ys:
-    :param categorical_feats:
-    :param metric_used:
-    :param eval_pos:
-    :param max_time: Scheduled maximum time
-    :param kwargs:
-    :return: list [np.array(metrics), np.array(outputs), best_configs] or [None, None, None] if failed
-    """
-
     metrics = []
     outputs = []
     best_configs = []

@@ -1,24 +1,21 @@
-import os
-import itertools
 import argparse
+import copy
+import itertools
+import json
+import os
+import numpy as np
 import time
 import yaml
-import json
-from contextlib import nullcontext
-import copy
 import warnings
-from typing import Optional
 
 import torch
+import torch.nn.functional as F
+import tunetables.priors as priors
+import tunetables.utils as utils
 from torch import nn
 from torch import autograd
-
-# from torch.cuda.amp import autocast, GradScaler
 from torch.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
-from torch import nn
-import numpy as np
-import uncertainty_metrics.numpy as um
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -26,8 +23,6 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-import tunetables.utils as utils
-from tunetables.transformer import TransformerModel
 from tunetables.utils import (
     get_cosine_schedule_with_warmup,
     get_openai_lr,
@@ -35,7 +30,6 @@ from tunetables.utils import (
     get_weighted_single_eval_pos_sampler,
     get_uniform_single_eval_pos_sampler,
 )
-import tunetables.priors as priors
 from tunetables.priors.real import (
     SummarizeAfter,
     process_data,
@@ -47,133 +41,127 @@ from tunetables.priors.real import (
     get_subset_dl,
 )
 from tunetables.losses import kl_divergence
+from tunetables.transformer import TransformerModel
 import tunetables.encoders as encoders
 import tunetables.positional_encodings as positional_encodings
 from tunetables.utils import init_dist, seed_all, EmbeddingConcatenator
+from contextlib import nullcontext
+from tqdm.auto import tqdm
+
+torch.backends.cudnn.benchmark = True
 
 
 class GPULossTracker:
-    """Tracks average loss across batches while keeping everything on GPU until final computation."""
-
     def __init__(self, device=None):
         self.running_loss = torch.tensor(0.0, device=device)
         self.count = 0
 
     def update(self, loss: torch.Tensor) -> None:
-        """Update running loss with the current batch loss."""
-        # Just detach without moving to CPU
         self.running_loss += loss.detach()
         self.count += 1
 
     def average(self) -> float:
-        """Get the average loss, only moving to CPU at the end."""
         avg = self.running_loss / max(self.count, 1)
         return avg.cpu().item()
 
     def reset(self) -> None:
-        """Reset the tracker for the next epoch."""
         self.running_loss.zero_()
         self.count = 0
 
 
 def real_data_eval_out(
     r_model,
-    cl=1000,
+    cl: int = 1152,
     train_data=None,
     val_dl=None,
-    softmax_temperature=torch.log(torch.tensor([0.8])),
-    return_probs=False,
+    softmax_temperature: torch.Tensor = torch.log(torch.tensor([0.8])),
+    return_probs: bool = False,
 ):
-    verbose = False
+    device = next(r_model.parameters()).device
+    r_model.eval()
+
+    td0 = train_data[0][:cl].to(device, non_blocking=True).to(torch.float32)
+    td1 = train_data[1][:cl].to(device, non_blocking=True).to(torch.float32)
+    single_eval_pos = td0.size(0)
+    num_classes_local = len(torch.unique(td1))
+
+    softmax_temperature = softmax_temperature.to(device)
 
     start_time = time.time()
-    td = copy.deepcopy(train_data)
-    num_classes_local = len(torch.unique(td[1]))
-    td[0] = td[0][:cl, ...]
-    td[1] = td[1][:cl, ...]
-    single_eval_pos = len(td[0])
-    device = next(r_model.parameters()).device
-    softmax_temperature = softmax_temperature.to(device)
+    prediction_list = []
+    target_list = []
+    output_list = []
+
     with torch.inference_mode():
-        # correct = 0
-        # total = len(val_dl.dataset)
-        prediction_list = []
-        target_list = []
-        output_list = []
-        for batch, (data, targets, _) in enumerate(val_dl):
-            # extra safeguard against learning from test set
-            print(f"Validation dataset shape: {data[0].shape}")
-            data_temp_idx = torch.randperm(data[1].nelement())
-            data[1] = data[1].view(-1)[data_temp_idx].view(data[1].size())
+        for data, targets, _ in tqdm(
+            val_dl, desc="Running inference", unit="batch", colour="green", ncols=80
+        ):
+            batch_x = data[0].to(device, non_blocking=True).to(torch.float32)
+            batch_y = data[1].to(device, non_blocking=True).to(torch.float32)
 
-            batch_data = tuple([
-                torch.cat((td[0], data[0]), dim=0).to(torch.float32),
-                torch.cat((td[1], data[1]), dim=0).to(torch.float32),
-            ])
-            output = r_model(
-                tuple(e.to(device) if torch.is_tensor(e) else e for e in batch_data)
-                if isinstance(batch_data, tuple)
-                else batch_data.to(device),
-                single_eval_pos=single_eval_pos,
-            )
-            output = output[:, 0:num_classes_local] / torch.exp(softmax_temperature)
-            output = torch.nn.functional.softmax(output, dim=-1)
-            output_list.append(output)
-            _, predicted = torch.max(output.cpu().data, 1)
-            prediction_list.append(predicted)
+            perm = torch.randperm(batch_y.nelement(), device=device)
+            batch_y = batch_y.view(-1)[perm].view_as(batch_y)
+
+            inp0 = torch.cat((td0, batch_x), dim=0)
+            inp1 = torch.cat((td1, batch_y), dim=0)
+            model_input = (inp0, inp1)
+
+            with torch.amp.autocast(device_type="cuda"):
+                out = r_model(model_input, single_eval_pos=cl)
+
+            out = out[:, :num_classes_local] / torch.exp(softmax_temperature)
+            out = F.softmax(out, dim=-1)
+
+            output_list.append(out)
+            _, preds = torch.max(out, 1)
+            prediction_list.append(preds.cpu())
             target_list.append(targets)
-        outputs = torch.cat(output_list, dim=0).cpu().numpy()
-        predictions = torch.cat(prediction_list, dim=0).cpu().numpy()
-        targets = torch.cat(target_list, dim=0).cpu().numpy()
 
-    results = dict()
-    warnings.filterwarnings("ignore")
-    results["Eval_Time"] = np.round(time.time() - start_time, 3).item()
-    accur = np.round(accuracy_score(targets, predictions), 3).item()
-    print(accur)
-    results["Accuracy"] = accur
+    outputs = torch.cat(output_list, dim=0).cpu().numpy()
+    predictions = torch.cat(prediction_list, dim=0).numpy()
+    targets_np = torch.cat(target_list, dim=0).numpy()
+
+    results = {}
+    results["Eval_Time"] = float(np.round(time.time() - start_time, 3))
+    results["Accuracy"] = float(np.round(accuracy_score(targets_np, predictions), 3))
     try:
-        results["Log_Loss"] = np.round(
-            log_loss(targets, outputs, labels=np.arange(num_classes_local)), 3
-        ).item()
-    except Exception as e:
-        if verbose:
-            print("Error calculating log loss: ", e)
+        results["Log_Loss"] = float(
+            np.round(
+                log_loss(targets_np, outputs, labels=np.arange(num_classes_local)), 3
+            )
+        )
+    except Exception:
         results["Log_Loss"] = 0.0
-    results["F1_Weighted"] = np.round(
-        f1_score(targets, predictions, average="weighted"), 3
-    ).item()
-    results["F1_Macro"] = np.round(
-        f1_score(targets, predictions, average="macro"), 3
-    ).item()
+    results["F1_Weighted"] = float(
+        np.round(f1_score(targets_np, predictions, average="weighted"), 3)
+    )
+    results["F1_Macro"] = float(
+        np.round(f1_score(targets_np, predictions, average="macro"), 3)
+    )
     try:
         if num_classes_local == 2:
-            results["ROC_AUC"] = np.round(
-                roc_auc_score(
-                    targets, outputs[:, 1], labels=np.arange(num_classes_local)
-                ),
-                3,
-            ).item()
+            results["ROC_AUC"] = float(
+                np.round(roc_auc_score(targets_np, outputs[:, 1]), 3)
+            )
         else:
-            results["ROC_AUC"] = np.round(
-                roc_auc_score(
-                    targets,
-                    outputs,
-                    labels=np.arange(num_classes_local),
-                    multi_class="ovr",
-                ),
-                3,
-            ).item()
-    except Exception as e:
-        if verbose:
-            print("Error calculating ROC AUC: ", e)
+            results["ROC_AUC"] = float(
+                np.round(
+                    roc_auc_score(
+                        targets_np,
+                        outputs,
+                        multi_class="ovr",
+                        labels=np.arange(num_classes_local),
+                    ),
+                    3,
+                )
+            )
+    except Exception:
         results["ROC_AUC"] = 0.0
 
-    warnings.filterwarnings("default")
     if return_probs:
-        return results, outputs, targets
+        return results, outputs, targets_np
     else:
-        return results, predictions, targets
+        return results, predictions, targets_np
 
 
 def train(
@@ -346,9 +334,7 @@ def train(
 
             n_features = X_train.shape[1]
             n_samples = X_train.shape[0]
-            # config['num_classes'] = len(set(y_train))
             num_classes = len(set(y_train))
-            # config['num_steps'] = len(X_train) // config['bptt']
             steps_per_epoch = len(X_train) // bptt
 
             if bptt > n_samples:
@@ -362,7 +348,6 @@ def train(
 
         X, y = X_train, y_train
 
-        # Permutation of label order
         if do_permute and (not is_wrapper):
             label_perm = np.random.permutation(num_classes)
         else:
@@ -371,13 +356,11 @@ def train(
         invert_perm_map = {label_perm[i]: i for i in range(num_classes)}
         rev_invert_perm_map = {i: label_perm[i] for i in range(num_classes)}
 
-        # Permutation of feature order
         if do_permute and (not is_wrapper):
             feat_idx = np.random.permutation(X.shape[1])
         else:
             feat_idx = np.arange(X.shape[1])
 
-        # Permutation of train data order
         idx = np.random.permutation(X.shape[0])
         X = X[idx, ...]
         y = y[idx, ...]
@@ -388,7 +371,6 @@ def train(
         X_val = X_val[:, feat_idx, ...]
         X_test = X_test[:, feat_idx, ...]
 
-        # label balancing
         num_classes = len(np.unique(np.unique(y)))
         if (
             do_prompt_tuning
@@ -437,7 +419,6 @@ def train(
             X_val = torch.from_numpy(X_val.copy().astype(np.float32))
             X_test = torch.from_numpy(X_test.copy().astype(np.float32))
 
-        # feature padding
         do_pf = extra_prior_kwargs_dict.get("pad_features", True)
         if do_pf:
 
@@ -453,10 +434,14 @@ def train(
                 X_val = pad_data(X_val)
             if X_test.shape[1] < num_features:
                 X_test = pad_data(X_test)
-
-        train_ds = TabDS(X, y)
-        val_ds = TabDS(X_val, y_val)
-        test_ds = TabDS(X_test, y_test)
+        if epochs == 0:
+            train_ds = TabDS(X, y)
+            val_ds = TabDS(X_val, y_val, show_shape=False)
+            test_ds = TabDS(X_test, y_test, show_shape=False)
+        else:
+            train_ds = TabDS(X, y)
+            val_ds = TabDS(X_val, y_val)
+            test_ds = TabDS(X_test, y_test)
 
         return (
             X,
@@ -498,10 +483,8 @@ def train(
             shuffle=False,
             num_workers=n_workers,
         )
-        # Fix the prior data TabPFN will use for fitting when including real data points
         X_data_for_fitting = []
         y_data_for_fitting = []
-        # td is a list of tensors
         for idx, (td, _, _) in enumerate(dl):
             X_data_for_fitting.append(td[0])
             y_data_for_fitting.append(td[1])
@@ -512,9 +495,7 @@ def train(
         data_for_fitting = [X_data_concat, y_data_concat]
         return dl, val_dl, test_dl, bptt, data_for_fitting
 
-    # REAL PRIOR
     if real_prior:
-        # load data
         not_zs = extra_prior_kwargs_dict.get("zs_eval_ensemble", 0) == 0
         do_zs = (not not_zs) and (not do_kl_loss)
         seed_all(extra_prior_kwargs_dict.get("rand_seed"))
@@ -597,7 +578,6 @@ def train(
             def tpc_data_eval(
                 cl=1000, X=None, y=None, X_val=None, y_val=None, ens_size=1
             ):
-                # update num_classes depending on the data
                 num_classes_local = len(np.unique(y))
                 start_time = time.time()
                 results = dict()
@@ -700,9 +680,7 @@ def train(
         return "", res_dict, None, None
 
     encoder = encoder_generator(num_features, emsize)
-    # style_def = dl.get_test_batch()[0][0] # the style in batch of the form ((style, x, y), target, single_eval_pos)
     style_def = None
-    # print(f'Style definition of first 3 examples: {style_def[:3] if style_def is not None else None}')
     style_encoder = (
         style_encoder_generator(style_def.shape[1], emsize)
         if (style_def is not None)
@@ -824,7 +802,6 @@ def train(
     if not real_prior:
         dl.model = model
 
-    # learning rate
     if lr is None:
         lr = get_openai_lr(model)
         if verbose:
@@ -832,11 +809,10 @@ def train(
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     sched_obj = scheduler(
         optimizer, warmup_epochs, epochs if epochs is not None else 100
-    )  # when training for fixed time lr schedule takes 100 steps
+    )
 
     scaler = GradScaler() if train_mixed_precision else None
 
-    # check that everything uses up-to-date APIs
     utils.check_compatibility(dl)
 
     master_epoch_count = []
@@ -855,16 +831,18 @@ def train(
         td[1] = td[1][:cl, ...]
         single_eval_pos = len(td[0])
         softmax_temperature = softmax_temperature.to(device)
-        # print("In real data eval, eval set size: ", len(val_dl.dataset))
         with torch.inference_mode():
-            # correct = 0
-            # total = len(val_dl.dataset)
             prediction_list = []
             target_list = []
             output_list = []
-            for batch, (data, targets, _) in enumerate(val_dl):
+            for batch, (data, targets, _) in tqdm(
+                val_dl,
+                desc="Running Evaluation",
+                unit="batch",
+                colour="green",
+                ncols=80,
+            ):
                 if extra_prior_kwargs_dict.get("debug", False):
-                    # Extra safeguard against test set contamination, permute label order before passing into model
                     data_temp_idx = torch.randperm(data[1].nelement())
                     data[1] = data[1].view(-1)[data_temp_idx].view(data[1].size())
 
@@ -878,7 +856,6 @@ def train(
                     else batch_data.to(device),
                     single_eval_pos=single_eval_pos,
                 )
-                # invert permutation of labels
                 new_output = loop_translate(output, invert_perm_map)
                 output = new_output
                 output = output[:, 0:num_classes_local] / torch.exp(softmax_temperature)
@@ -890,12 +867,12 @@ def train(
             outputs = torch.cat(output_list, dim=0).cpu().numpy()
             predictions = torch.cat(prediction_list, dim=0).cpu().numpy()
             targets = torch.cat(target_list, dim=0).cpu().numpy()
-            # print("In real data eval, Targets: ", targets[:20])
 
         results = dict()
         warnings.filterwarnings("ignore")
         results["Eval_Time"] = np.round(time.time() - start_time, 3).item()
-        results["Accuracy"] = np.round(accuracy_score(targets, predictions), 3).item()
+        accuracy = np.round(accuracy_score(targets, predictions), 3).item()
+        results["Accuracy"] = accuracy
         try:
             results["Log_Loss"] = np.round(
                 log_loss(targets, outputs, labels=np.arange(num_classes_local)), 3
@@ -1133,7 +1110,6 @@ def train(
                 step_time = time.time() - before_forward
             before_get_batch = time.time()
             batches_seen += 1
-        # Total positional losses is a torch tensor of size bptt (batch size)
         if batches_seen < extra_prior_kwargs_dict.get("min_batches_per_epoch", 1):
             raise ValueError(
                 "Not enough batches seen in epoch: saw {} batches, expected at least {}".format(
@@ -1153,7 +1129,6 @@ def train(
         return total_loss, None, time_to_get_batch, forward_time, step_time, None, None
 
     def concat_embedding(ec, model, method):
-        # extract embedding parameters
         device = ec.model.prefix_embedding.weight.device
         if method == "duplicate":
             ec.concatenated_embedding = torch.cat(
@@ -1189,14 +1164,11 @@ def train(
                     dim=0,
                 ).to(device)
                 if "size-ctl" in method:
-                    # select random sample of size prefix_size
                     if "perm" in method:
-                        # random permutation
                         sel = torch.randperm(ec.concatenated_embedding.shape[0])[
                             : ec.original_prefix_size
                         ].to(device)
                     else:
-                        # first-k-samples
                         total_emb_size = ec.original_prefix_size
                         emb_size = total_emb_size // num_to_concat
                         orig_emb_size = ec.original_embedding.shape[0]
@@ -1225,24 +1197,20 @@ def train(
         return model
 
     def save_prefix_weights(model, path, i, do_concat, prefix_weights_l):
-        # Save prefix weights
         prefix_weights = model.state_dict()["prefix_embedding.weight"].cpu().numpy()
         prefix_fn = f"prefix_weights_{i}.npy"
         prefix_save_path = os.path.join(path, prefix_fn)
-        # if not is_wrapper:
         np.save(prefix_save_path, prefix_weights)
         prefix_y_labels = model.prefix_y_embedding.cpu().numpy()
         prefix_y_fn = f"prefix_y_labels_{i}.npy"
         prefix_y_save_path = os.path.join(path, prefix_y_fn)
 
-        # if not is_wrapper:
         np.save(prefix_y_save_path, prefix_y_labels)
         if do_concat:
             prefix_weights_l.append({
                 "prefix_weights": torch.from_numpy(prefix_weights).float(),
                 "prefix_y_labels": torch.from_numpy(prefix_y_labels),
             })
-            # print("Prefix weights list length: ", len(prefix_weights_l))
         return prefix_weights_l
 
     def update_ensemble_acc(
@@ -1515,11 +1483,15 @@ def train(
                     res_dict, **{"Val_" + k: v for k, v in val_results.items()}
                 )
                 val_score = res_dict["Val_Accuracy"]
+
                 return_outputs = [val_outputs]
                 return_targets = [val_targets]
                 if do_prompt_tuning:
                     # TODO: will this work with context length 0? Should this be a hyperparameter?
                     if do_concat != "":
+                        print(
+                            f"We are doing the prompting and concatenation: {do_concat}"
+                        )
                         ec = EmbeddingConcatenator(t_model, do_concat, prefix_weights_l)
                         t_model = concat_embedding(ec, t_model, do_concat)
                         val_score_concat, _, _ = real_data_eval(
@@ -1549,7 +1521,6 @@ def train(
                             },
                         )
                         t_model = restore_embedding(ec, t_model)
-                        # Update optimizer parameters to include new embedding
                         t_optim = torch.optim.AdamW(
                             t_model.parameters(), lr=lr, weight_decay=weight_decay
                         )
@@ -1589,6 +1560,7 @@ def train(
 
             elif hasattr(dl, "validate") and epoch % validation_period == 0:
                 with torch.no_grad():
+                    print(f"VALIDATION WITH VALIDATE ATTRIBUTE: {val_score}")
                     val_score = dl.validate(model)
 
             NO_PATIENCE = patience > extra_prior_kwargs_dict.get(
@@ -1635,6 +1607,7 @@ def train(
                     f" | data time {time_to_get_batch:5.2f} | step time {step_time:5.2f}"
                     f" | forward time {forward_time:5.2f}"
                     f" | val score {val_score}"
+                    f" | test score {test_score}"
                     if val_score is not None
                     else f" | val score nc {res_dict.get('Val_nc_Accuracy', 0)}"
                     if val_score_nc is not None
@@ -1874,10 +1847,6 @@ def train(
     except KeyboardInterrupt:
         pass
 
-    # ***
-    # train/ENSEMBLING 2-nth loop
-    # ***
-
     if is_ensemble:
         for i in range(1, boosting_n_iters):
             next_seed = extra_prior_kwargs_dict.get("rand_seed") + i
@@ -1886,10 +1855,6 @@ def train(
             # extra_prior_kwargs_dict['rand_seed'] = next_seed
 
             if extra_prior_kwargs_dict.get("reseed_data", True):
-                # reset subset maker
-                # if getattr(dataset, "ssm", None) is not None:
-                #     delattr(dataset, "ssm")
-                # load data
                 extra_prior_kwargs_dict["do_impute"] = np.random.choice([True, False])
                 extra_prior_kwargs_dict["ohe"] = np.random.choice([True, False])
                 extra_prior_kwargs_dict["preprocess_type"] = np.random.choice([
@@ -2257,8 +2222,6 @@ if __name__ == "__main__":
             permutation_invariant_max_eval_pos
         )
 
-    print("ARGS for `train`:", args.__dict__)
-
     train(
         prior,
         criterion,
@@ -2267,102 +2230,3 @@ if __name__ == "__main__":
         pos_encoder_generator=pos_encoder_generator,
         **args.__dict__,
     )
-
-def real_data_eval(
-    r_model,
-    invert_perm_map,
-    cl=1000,
-    train_data=None,
-    val_dl=None,
-    softmax_temperature=torch.log(torch.tensor([0.8])),
-    device="cuda"
-):
-    start_time = time.time()
-    td = copy.deepcopy(train_data)
-    num_classes_local = len(torch.unique(td[1]))
-    td[0] = td[0][:cl, ...]
-    td[1] = td[1][:cl, ...]
-    single_eval_pos = len(td[0])
-    softmax_temperature = softmax_temperature.to(device)
-    # print("In real data eval, eval set size: ", len(val_dl.dataset))
-    with torch.inference_mode():
-        # correct = 0
-        # total = len(val_dl.dataset)
-        prediction_list = []
-        target_list = []
-        output_list = []
-        for batch, (data, targets, _) in enumerate(val_dl):
-            if True:
-                # Extra safeguard against test set contamination, permute label order before passing into model
-                data_temp_idx = torch.randperm(data[1].nelement())
-                data[1] = data[1].view(-1)[data_temp_idx].view(data[1].size())
-
-            batch_data = tuple([
-                torch.cat((td[0], data[0]), dim=0).to(torch.float32),
-                torch.cat((td[1], data[1]), dim=0).to(torch.float32),
-            ])
-            output = r_model(
-                tuple(e.to(device) if torch.is_tensor(e) else e for e in batch_data)
-                if isinstance(batch_data, tuple)
-                else batch_data.to(device),
-                single_eval_pos=single_eval_pos,
-            )
-            # invert permutation of labels
-            new_output = loop_translate(output, invert_perm_map)
-            output = new_output
-            output = output[:, 0:num_classes_local] / torch.exp(softmax_temperature)
-            output = torch.nn.functional.softmax(output, dim=-1)
-            output_list.append(output)
-            _, predicted = torch.max(output.cpu().data, 1)
-            prediction_list.append(predicted)
-            target_list.append(targets)
-        outputs = torch.cat(output_list, dim=0).cpu().numpy()
-        predictions = torch.cat(prediction_list, dim=0).cpu().numpy()
-        targets = torch.cat(target_list, dim=0).cpu().numpy()
-        # print("In real data eval, Targets: ", targets[:20])
-
-    results = dict()
-    warnings.filterwarnings("ignore")
-    results["Eval_Time"] = np.round(time.time() - start_time, 3).item()
-    accur = np.round(accuracy_score(targets, predictions), 3).item()
-    print(accur)
-    results["Accuracy"] = accur
-    try:
-        results["Log_Loss"] = np.round(
-            log_loss(targets, outputs, labels=np.arange(num_classes_local)), 3
-        ).item()
-    except Exception as e:
-        if False:
-            print("Error calculating log loss: ", e)
-        results["Log_Loss"] = 0.0
-    results["F1_Weighted"] = np.round(
-        f1_score(targets, predictions, average="weighted"), 3
-    ).item()
-    results["F1_Macro"] = np.round(
-        f1_score(targets, predictions, average="macro"), 3
-    ).item()
-    try:
-        if num_classes_local == 2:
-            results["ROC_AUC"] = np.round(
-                roc_auc_score(
-                    targets, outputs[:, 1], labels=np.arange(num_classes_local)
-                ),
-                3,
-            ).item()
-        else:
-            results["ROC_AUC"] = np.round(
-                roc_auc_score(
-                    targets,
-                    outputs,
-                    labels=np.arange(num_classes_local),
-                    multi_class="ovr",
-                ),
-                3,
-            ).item()
-    except Exception as e:
-        print("Error calculating ROC AUC: ", e)
-        results["ROC_AUC"] = 0.0
-
-    warnings.filterwarnings("default")
-
-    return results, outputs, targets

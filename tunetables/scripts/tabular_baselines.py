@@ -330,8 +330,6 @@ def transformer_metric(
     return metric, pred, None
 
 
-## Auto Gluon
-# WARNING: Crashes for some predictors for regression
 def autogluon_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
     from autogluon.tabular import TabularPredictor
 
@@ -351,19 +349,16 @@ def autogluon_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=3
         problem_type = "multiclass" if len(np.unique(y)) > 2 else "binary"
     else:
         problem_type = "regression"
-    # AutoGluon automatically infers datatypes, we don't specify the categorical labels
     predictor = TabularPredictor(
         label=train_data.columns[-1],
         eval_metric=get_scoring_string(
             metric_used, usage="autogluon", multiclass=(len(np.unique(y)) > 2)
         ),
         problem_type=problem_type,
-        ## seed=int(y[:].sum()) doesn't accept seed
     ).fit(
         train_data=train_data,
         time_limit=max_time,
         presets=["best_quality"],
-        # The seed is deterministic but varies for each dataset and each split of it
     )
 
     if is_classification(metric_used):
@@ -377,21 +372,6 @@ def autogluon_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=3
 
 
 def get_updates_for_regularization_cocktails(categorical_indicator: np.ndarray):
-    """
-    These updates replicate the regularization cocktail paper search space.
-    Args:
-        categorical_indicator (np.ndarray)
-            An array that indicates whether a feature is categorical or not.
-        args (Namespace):
-            The different updates for the setup of the run, mostly updates
-            for the different regularization ingredients.
-    Returns:
-    ________
-        pipeline_update, search_space_updates, include_updates (Tuple[dict, HyperparameterSearchSpaceUpdates, dict]):
-            The pipeline updates like number of epochs, budget, seed etc.
-            The search space updates like setting different hps to different values or ranges.
-            Lastly include updates, which can be used to include different features.
-    """
     from autoPyTorch.utils.hyperparameter_search_space_update import (
         HyperparameterSearchSpaceUpdates,
     )

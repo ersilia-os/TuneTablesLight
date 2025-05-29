@@ -12,6 +12,7 @@ from tunetables.priors.utils import uniform_int_sampler_f
 from tunetables.notebook_utils import *
 from tunetables.utils import make_serializable, wandb_init
 
+
 def train_function_2(
     config_sample,
     i=0,
@@ -73,11 +74,11 @@ def train_function_2(
         y_wrapper=y_wrapper,
         cat_idx=cat_idx,
     )
-    print(f"Results dict: {model} | {results_dict} | {data_for_fitting} | {test_loader}")
     if is_wrapper:
         return model, data_for_fitting, test_loader
     else:
         return results_dict
+
 
 def train_function(
     config_sample,
@@ -140,7 +141,6 @@ def train_function(
         y_wrapper=y_wrapper,
         cat_idx=cat_idx,
     )
-    print(f"Results dict: {model} | {results_dict} | {data_for_fitting} | {test_loader}")
     if is_wrapper:
         return model, data_for_fitting, test_loader
     else:

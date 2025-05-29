@@ -50,7 +50,7 @@ except ImportError:
 
 
 class TabDS(Dataset):
-    def __init__(self, X, y):
+    def __init__(self, X, y, show_shape=True):
         # check if NaNs are present in y
         if np.isnan(y).any():
             print("WARNING: NaNs present in y, dropping them")
@@ -67,8 +67,8 @@ class TabDS(Dataset):
 
         self.y_float = torch.from_numpy(y.copy().astype(np.float32))
         self.y = torch.from_numpy(y.copy().astype(np.int64))
-
-        print(f"TabDS: X.shape = {self.X.shape}, y.shape = {self.y.shape}")
+        if show_shape:
+            print(f"TabDS: X.shape = {self.X.shape}, y.shape = {self.y.shape}")
 
     def __len__(self):
         return len(self.y)
@@ -716,8 +716,6 @@ def process_data(
 
     # validate the scaler
     assert scaler in ["None"], f"scaler not recognized: {scaler}"
-
-    print("Do impute: ", impute)
 
     num_mask = np.ones(dataset.X.shape[1], dtype=int)
     num_mask[dataset.cat_idx] = 0

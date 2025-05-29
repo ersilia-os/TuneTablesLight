@@ -295,7 +295,6 @@ def remove_outliers(X, n_sigma=4, normalize_positions=-1):
 
     X = torch.maximum(-torch.log(1 + torch.abs(X)) + lower, X)
     X = torch.minimum(torch.log(1 + torch.abs(X)) + upper, X)
-    # print(ds[1][data < lower, col], ds[1][data > upper, col], ds[1][~np.isnan(data), col].shape, data_mean, data_std)
     return X
 
 
@@ -321,9 +320,7 @@ def print_on_master_only(is_master):
 
 
 def init_dist(device):
-    # print('init dist')
     if "LOCAL_RANK" in os.environ:
-        # launched with torch.distributed.launch
         rank = int(os.environ["LOCAL_RANK"])
         print("torch.distributed.launch and my rank is", rank)
         torch.cuda.set_device(rank)
@@ -343,7 +340,6 @@ def init_dist(device):
         )
         return True, rank, f"cuda:{rank}"
     elif "SLURM_PROCID" in os.environ and torch.cuda.device_count() > 1:
-        # this is for multi gpu when starting with submitit
         assert device != "cpu:0"
         rank = int(os.environ["SLURM_PROCID"])
         os.environ["MASTER_ADDR"] = "localhost"
@@ -367,13 +363,10 @@ def init_dist(device):
 
         return True, rank, f"cuda:{rank}"
     else:
-        # print('Not using distributed')
-        # will not change any of the behavior of print, but allows putting the force=True in the print calls
         print_on_master_only(True)
         return False, 0, device
 
 
-# NOP function for python with statements (x = NOP(); with x:)
 class NOP:
     def __enter__(self):
         pass
@@ -428,7 +421,6 @@ class EmbeddingConcatenator:
             self.concatenated_embedding = torch.cat(
                 [self.original_embedding, self.original_embedding], dim=0
             ).to(self.model.prefix_embedding.weight.device)
-            # print("concatenated embedding shape: {}".format(self.concatenated_embedding.shape))
             self.concatenated_y_embedding = torch.cat(
                 [self.original_y_embedding, self.original_y_embedding], dim=0
             ).to(self.model.prefix_embedding.weight.device)
@@ -442,7 +434,6 @@ class EmbeddingConcatenator:
     def replace_embedding(self):
         if self.concatenated_embedding is None:
             raise ValueError("Please concat embedding first!")
-        # self.model._state_dict()['prefix_embedding.weight'] = self.concatenated_embedding
         self.model.prefix_embedding.weight = nn.Parameter(self.concatenated_embedding)
         self.model.prefix_y_embedding = self.concatenated_y_embedding
         self.model.prefix_size = self.prefix_size
@@ -455,15 +446,6 @@ class EmbeddingConcatenator:
 
 
 def is_json_serializable(obj):
-    """
-    Test if an object is JSON serializable.
-
-    Args:
-    obj (any): The object to test for JSON serialization.
-
-    Returns:
-    bool: True if the object is JSON serializable, False otherwise.
-    """
     try:
         json.dumps(obj)
         return True
@@ -486,7 +468,6 @@ def make_serializable(config_sample):
 
 
 def get_wandb_api_key(api_key_file="./config/wandb_api_key.txt"):
-    # todo: if we make a config folder, put wandb_api_key.txt into the config folder
     try:
         return os.environ["WANDB_API_KEY"]
     except KeyError:

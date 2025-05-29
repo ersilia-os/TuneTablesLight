@@ -77,7 +77,6 @@ class TransformerModel(nn.Module):
         self.prefix_size = prefix_size
         if self.prefix_size > 0:
             self.prefix_embedding = nn.Embedding(prefix_size, ninp)
-            # name the parameters in prefix_embedding to avoid confusion with the encoder
             if prefix_label_probs is not None:
                 self.prefix_y_embedding = torch.multinomial(
                     prefix_label_probs, prefix_size, replacement=True
@@ -85,7 +84,7 @@ class TransformerModel(nn.Module):
             else:
                 self.prefix_y_embedding = torch.randint(0, n_classes, (prefix_size,))
             print(
-                "prefix_y_embedding has {} unique classes".format(
+                "|prefix_y_embedding has {} unique classes |".format(
                     len(torch.unique(self.prefix_y_embedding))
                 )
             )
@@ -97,30 +96,38 @@ class TransformerModel(nn.Module):
 
         self.init_weights()
         print("Model initialized with following parameters: ")
-        print(
-            "ninp: {}, nhead: {}, nhid: {}, nlayers: {}, dropout: {}, activation: {}, recompute_attn: {}, "
-            "num_global_att_tokens: {}, full_attention: {}, all_layers_same_init: {}, efficient_eval_masking: {}, "
-            "prefix_size: {}, n_classes: {}, encoder: {}, y_encoder: {}, pos_encoder: {}, style_encoder: {}, linear: {}".format(
-                ninp,
-                nhead,
-                nhid,
-                nlayers,
-                dropout,
-                activation,
-                recompute_attn,
-                num_global_att_tokens,
-                full_attention,
-                all_layers_same_init,
-                efficient_eval_masking,
-                prefix_size,
-                n_classes,
-                encoder,
-                y_encoder,
-                pos_encoder,
-                style_encoder,
-                linear,
-            )
-        )
+        params = {
+            "ninp": ninp,
+            "nhead": nhead,
+            "nhid": nhid,
+            "nlayers": nlayers,
+            "dropout": dropout,
+            "activation": activation,
+            "recompute_attn": recompute_attn,
+            "num_global_att_tokens": num_global_att_tokens,
+            "full_attention": full_attention,
+            "all_layers_same_init": all_layers_same_init,
+            "efficient_eval_masking": efficient_eval_masking,
+            "prefix_size": prefix_size,
+            "n_classes": n_classes,
+            "encoder": encoder,
+            "y_encoder": y_encoder,
+            "pos_encoder": pos_encoder,
+            "style_encoder": style_encoder,
+            "linear": linear,
+        }
+
+        col1 = max(len(k) for k in params.keys())
+        col2 = max(len(str(v)) for v in params.values())
+
+        sep = "+-" + "-" * col1 + "-+-" + "-" * col2 + "-+"
+
+        print(sep)
+        print("| {:<{w1}} | {:<{w2}} |".format("Parameter", "Value", w1=col1, w2=col2))
+        print(sep)
+        for k, v in params.items():
+            print("| {:<{w1}} | {:<{w2}} |".format(k, str(v), w1=col1, w2=col2))
+        print(sep)
 
     def __setstate__(self, state):
         super().__setstate__(state)
@@ -157,8 +164,6 @@ class TransformerModel(nn.Module):
         train_size = seq_len + num_global_att_tokens - num_query_tokens
         trainset_size = seq_len - num_query_tokens
         mask = torch.zeros(trainset_size, num_global_att_tokens) == 0
-        # mask[:,num_global_att_tokens:].zero_()
-        # mask[:,num_global_att_tokens:] |= torch.eye(trainset_size) == 1
         return bool_mask_to_att_mask(mask)
 
     @staticmethod
@@ -176,7 +181,6 @@ class TransformerModel(nn.Module):
 
     def freeze_parameters_except_prefix(self):
         for name, param in self.named_parameters():
-            # Freeze all parameters except those in prefix_embedding
             if "prefix_embedding" not in name:
                 param.requires_grad = False
             else:
@@ -184,7 +188,6 @@ class TransformerModel(nn.Module):
 
     def freeze_parameters_except_named(self, param_strings):
         for name, param in self.named_parameters():
-            # Freeze all parameters except those in prefix_embedding
             grad_reqd = False
             for s in param_strings:
                 if s in name:

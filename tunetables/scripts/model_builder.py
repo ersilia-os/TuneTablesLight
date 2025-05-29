@@ -1,45 +1,35 @@
-from pathlib import Path
 import argparse
-from datetime import datetime
-from functools import partial
-import torch
 import numpy as np
 import subprocess as sp
 import os
+import torch
+import tunetables.encoders as encoders
+from tunetables.utils import init_dist, seed_all, EmbeddingConcatenator
 from torch.utils.data import DataLoader
-import tunetables.utils as utils
 from tunetables.transformer import TransformerModel
 from tunetables.utils import (
-    get_cosine_schedule_with_warmup,
-    get_openai_lr,
-    StoreDictKeyPair,
-    get_weighted_single_eval_pos_sampler,
     get_uniform_single_eval_pos_sampler,
 )
 import tunetables.priors as priors
+from tunetables.priors.real import TabDS
 from tunetables.priors.real import (
     SummarizeAfter,
     process_data,
     loop_translate,
-    TabDS,
     preprocess_input,
     get_train_dataloader,
     get_shuffle_index,
-    get_subset_dl,
 )
-from tunetables.losses import kl_divergence
-import tunetables.encoders as encoders
-import tunetables.positional_encodings as positional_encodings
-from tunetables.utils import init_dist, seed_all, EmbeddingConcatenator
-import tunetables.encoders as encoders
-from tunetables.transformer import TransformerModel
 from tunetables.utils import (
     get_uniform_single_eval_pos_sampler,
     get_fixed_batch_sampler,
 )
-import tunetables.priors as priors
 from tunetables.train import train
+from tunetables.transformer import TransformerModel
 from tunetables.losses import Losses
+from pathlib import Path
+from datetime import datetime
+from functools import partial
 
 
 def save_model(model, path, filename, config_sample):
@@ -65,12 +55,10 @@ def save_model(model, path, filename, config_sample):
     if os.path.exists(config_sample["base_path"]):
         os.chmod(config_sample["base_path"], 0o777)
     try:
-        # TODO: something about the target path is making the model unhappy
         os.makedirs(os.path.join("./models_diff"), exist_ok=True)
         torch.save((model.state_dict(), None, config_sample), target_path)
         os.chmod(target_path, 0o777)
     except:
-        # NOTE: This seems to work as long as you run the script from the base directory
         os.makedirs(os.path.join("./models_diff"), exist_ok=True)
         target_path = os.path.join("./models_diff", filename)
         torch.save((model.state_dict(), None, config_sample), target_path)
@@ -84,13 +72,10 @@ def get_gpu_memory():
 
 
 def load_model_only_inference(path, filename, device, prefix_size, n_classes):
-    import tunetables.positional_encodings as positional_encodings
-
-    model_state, optimizer_state, config_sample = torch.load(
-        os.path.join(path, filename), map_location="cuda"
+    model_state, _, config_sample = torch.load(
+        os.path.join(path, filename), map_location="cpu"
     )
     config_sample["prefix_size"] = prefix_size
-    # TODO: check this, it was set to true in the training script
     config_sample["recompute_attn"] = True
     if (
         (
@@ -111,7 +96,6 @@ def load_model_only_inference(path, filename, device, prefix_size, n_classes):
         encoder = partial(encoders.Linear, replace_nan_by_zero=True)
 
     n_out = config_sample["max_num_classes"]
-    print("max classes is", n_out)
     device = device if torch.cuda.is_available() else "cpu:0"
     encoder = encoder(config_sample["num_features"], config_sample["emsize"])
 
@@ -141,7 +125,6 @@ def load_model_only_inference(path, filename, device, prefix_size, n_classes):
         prefix_size=10,
         n_classes=n_classes,
     )
-    print(f"Model state dictionary: {model_state.get('prefix_embedding.weight', None)}")
     model.criterion = loss
     module_prefix = "module."
     model_state = {k.replace(module_prefix, ""): v for k, v in model_state.items()}
@@ -149,7 +132,6 @@ def load_model_only_inference(path, filename, device, prefix_size, n_classes):
         model_state.get("prefix_embedding.weight", None) is None
         and model.state_dict().get("prefix_embedding.weight", None) is not None
     ):
-        print("Loading prefix embedding")
         model_state["prefix_embedding.weight"] = model.state_dict()[
             "prefix_embedding.weight"
         ]
@@ -161,8 +143,6 @@ def load_model_only_inference(path, filename, device, prefix_size, n_classes):
 
 
 def load_model(path, filename, device, eval_positions, verbose):
-    # TODO: This function only restores evaluation functionality but training canät be continued. It is also not flexible.
-    print("!! Warning: GPyTorch must be installed !!")
     model_state, optimizer_state, config_sample = torch.load(
         os.path.join(path, filename), map_location="cpu"
     )
@@ -197,8 +177,6 @@ def load_model(path, filename, device, eval_positions, verbose):
         "bptt_extra_samples"
     ]
     config_sample["bptt_extra_samples"] = None
-
-    # print('Memory', str(get_gpu_memory()))
 
     model = get_model(config_sample, device=device, should_train=False, verbose=verbose)
     module_prefix = "module."
@@ -241,7 +219,7 @@ def get_default_spec(test_datasets, valid_datasets):
         3000,
         4000,
         5000,
-    ]  # list(2 ** np.array([4, 5, 6, 7, 8, 9, 10, 11, 12]))
+    ]
     max_features = max(
         [X.shape[1] for (_, X, _, _, _, _) in test_datasets]
         + [X.shape[1] for (_, X, _, _, _, _) in valid_datasets]
@@ -330,7 +308,7 @@ def get_model(
     x_wrapper=None,
     y_wrapper=None,
     cat_idx=None,
-    get_dataset=False
+    get_dataset=False,
 ):
     extra_kwargs = {}
     n_features = config["max_features"]
@@ -362,8 +340,6 @@ def get_model(
 
     if config["prior_type"] == "real":
         from priors.real import TabularDataset
-
-        print("is_wrapper", is_wrapper)
 
         if is_wrapper:
             num_classes = len(np.unique(y_wrapper))
@@ -486,8 +462,6 @@ def get_model(
     else:
         encoder = partial(encoders.Linear, replace_nan_by_zero=True)
 
-    # check_is_compatible = False if 'multiclass_loss_type' not in config else (config['multiclass_loss_type'] == 'compatible')
-
     epochs = 0 if not should_train else config["epochs"]
 
     args = argparse.Namespace(**config)
@@ -568,7 +542,15 @@ def get_model(
             min_len=config.get("min_eval_pos", 0),
         )
     if get_dataset:
-        return get_train_dataset(args, dataloader, extra_prior_kwargs_dict=epkd, single_eval_pos_gen=sep_samp, aggregate_k_gradients=config["aggregate_k_gradients"], is_wrapper=is_wrapper, steps_per_epoch=config["num_steps"])
+        return get_train_dataset(
+            args,
+            dataloader,
+            extra_prior_kwargs_dict=epkd,
+            single_eval_pos_gen=sep_samp,
+            aggregate_k_gradients=config["aggregate_k_gradients"],
+            is_wrapper=is_wrapper,
+            steps_per_epoch=config["num_steps"],
+        )
     model, results_dict, data_for_fitting, test_loader = train(
         args,
         dataloader,
@@ -577,7 +559,6 @@ def get_model(
         style_encoder_generator=encoders.StyleEncoder if use_style else None,
         emsize=config["emsize"],
         nhead=config["nhead"],
-        # For unsupervised learning change to NanHandlingEncoder
         y_encoder_generator=encoders.get_Canonical(config["max_num_classes"])
         if config.get("canonical_y_encoder", False)
         else encoders.Linear,
@@ -605,7 +586,7 @@ def get_model(
         boosting_lr=config.get("boosting_lr", 1e-3),
         boosting_n_iters=config.get("boosting_n_iters", 10),
         rand_init_ensemble=config.get("rand_init_ensemble", False),
-        do_concat=config.get("concat_method", ""),
+        do_concat=config.get("concat_method", "duplicate"),
         weight_decay=config.get("weight_decay", 0.0),
         is_wrapper=is_wrapper,
         x_wrapper=x_wrapper,
@@ -613,8 +594,6 @@ def get_model(
     )
 
     return model, results_dict, data_for_fitting, test_loader
-
-    # return model, results_dict
 
 
 def get_train_dataset(
@@ -627,24 +606,19 @@ def get_train_dataset(
     aggregate_k_gradients=1,
     verbose=False,
     is_wrapper=False,
-    steps_per_epoch=100
+    steps_per_epoch=100,
 ):
-    # ulimit error fix
     torch.multiprocessing.set_sharing_strategy("file_system")
-    # fork warning fix
     torch.multiprocessing.set_start_method("spawn", force=True)
-    # set gpu device
     device = gpu_device if torch.cuda.is_available() else "cpu:0"
-    using_dist, rank, device = init_dist(device)
+    _, _, device = init_dist(device)
 
-    # set verbose to True
     if not verbose:
         verbose = True
         print(
             "Currently, verbose must be set to True (pass --verbose); this will change in a future release"
         )
 
-    # verify that the save path exists
     if not os.path.exists(extra_prior_kwargs_dict.get("save_path")):
         try:
             os.makedirs(extra_prior_kwargs_dict.get("save_path"))
@@ -653,12 +627,10 @@ def get_train_dataset(
             print("Using current directory instead")
             extra_prior_kwargs_dict["save_path"] = os.getcwd()
 
-    max_time = extra_prior_kwargs_dict.get("max_time", 0)
     do_kl_loss = extra_prior_kwargs_dict.get("kl_loss", False)
     n_workers = extra_prior_kwargs_dict.get("num_workers", 1)
     extra_prior_kwargs_dict["do_impute"] = True
     extra_prior_kwargs_dict["ohe"] = False
-    linear = extra_prior_kwargs_dict.get("linear", False)
 
     if extra_prior_kwargs_dict.get("pad_features", None):
         num_features = 100
@@ -672,10 +644,8 @@ def get_train_dataset(
 
     if extra_prior_kwargs_dict.get("prompt_tuning"):
         do_prompt_tuning = True
-        prefix_size = extra_prior_kwargs_dict.get("tuned_prompt_size", 100)
     else:
         do_prompt_tuning = False
-        prefix_size = 0
 
     single_eval_pos_gen = (
         single_eval_pos_gen
@@ -705,21 +675,19 @@ def get_train_dataset(
             test_index = dataset.split_indeces[1]
         else:
             for i, split_dictionary in enumerate(dataset.split_indeces):
-                # TODO: make stopping index a hyperparameter
-                if i != extra_prior_kwargs_dict.get("split"):  # config['split']:
+                if i != extra_prior_kwargs_dict.get("split"):
                     continue
                 train_index = split_dictionary["train"]
                 val_index = split_dictionary["val"]
                 test_index = split_dictionary["test"]
 
         if True:
-            # run pre-processing & split data (list of numpy arrays of length num_ensembles)
             processed_data = process_data(
                 dataset,
                 train_index,
                 val_index,
                 test_index,
-                verbose=extra_prior_kwargs_dict.get("verbose"),  # config['verbose'],
+                verbose=extra_prior_kwargs_dict.get("verbose"),
                 scaler="None",
                 one_hot_encode=extra_prior_kwargs_dict.get("ohe", True),
                 impute=extra_prior_kwargs_dict.get("do_impute", True),
@@ -750,11 +718,8 @@ def get_train_dataset(
             X_test = X_test[extra_prior_kwargs_dict["shuffle_index"]["test"]]
             y_test = y_test[extra_prior_kwargs_dict["shuffle_index"]["test"]]
 
-            n_features = X_train.shape[1]
             n_samples = X_train.shape[0]
-            # config['num_classes'] = len(set(y_train))
             num_classes = len(set(y_train))
-            # config['num_steps'] = len(X_train) // config['bptt']
             steps_per_epoch = len(X_train) // bptt
 
             if bptt > n_samples:
@@ -768,7 +733,6 @@ def get_train_dataset(
 
         X, y = X_train, y_train
 
-        # Permutation of label order
         if do_permute and (not is_wrapper):
             label_perm = np.random.permutation(num_classes)
         else:
@@ -777,13 +741,11 @@ def get_train_dataset(
         invert_perm_map = {label_perm[i]: i for i in range(num_classes)}
         rev_invert_perm_map = {i: label_perm[i] for i in range(num_classes)}
 
-        # Permutation of feature order
         if do_permute and (not is_wrapper):
             feat_idx = np.random.permutation(X.shape[1])
         else:
             feat_idx = np.arange(X.shape[1])
 
-        # Permutation of train data order
         idx = np.random.permutation(X.shape[0])
         X = X[idx, ...]
         y = y[idx, ...]
@@ -794,7 +756,6 @@ def get_train_dataset(
         X_val = X_val[:, feat_idx, ...]
         X_test = X_test[:, feat_idx, ...]
 
-        # label balancing
         num_classes = len(np.unique(np.unique(y)))
         if (
             do_prompt_tuning
@@ -843,7 +804,6 @@ def get_train_dataset(
             X_val = torch.from_numpy(X_val.copy().astype(np.float32))
             X_test = torch.from_numpy(X_test.copy().astype(np.float32))
 
-        # feature padding
         do_pf = extra_prior_kwargs_dict.get("pad_features", True)
         if do_pf:
 
@@ -904,10 +864,8 @@ def get_train_dataset(
             shuffle=False,
             num_workers=n_workers,
         )
-        # Fix the prior data TabPFN will use for fitting when including real data points
         X_data_for_fitting = []
         y_data_for_fitting = []
-        # td is a list of tensors
         for idx, (td, _, _) in enumerate(dl):
             X_data_for_fitting.append(td[0])
             y_data_for_fitting.append(td[1])
@@ -917,11 +875,9 @@ def get_train_dataset(
                 break
         data_for_fitting = [X_data_concat, y_data_concat]
         return dl, val_dl, test_dl, bptt, data_for_fitting
-    
+
     if real_prior:
-        # load data
         not_zs = extra_prior_kwargs_dict.get("zs_eval_ensemble", 0) == 0
-        do_zs = (not not_zs) and (not do_kl_loss)
         seed_all(extra_prior_kwargs_dict.get("rand_seed"))
 
         if do_kl_loss:

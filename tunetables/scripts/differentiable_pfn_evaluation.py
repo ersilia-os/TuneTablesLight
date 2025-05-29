@@ -1,4 +1,3 @@
-import os
 import torch
 import numpy as np
 import time
@@ -93,28 +92,6 @@ def evaluate_point_model(
     eval_positions=None,
     **kwargs,
 ):
-    """
-    Evaluation function for diffable model evaluation. Returns a list of results.
-
-    :param model:
-    :param valid_datasets:
-    :param test_datasets:
-    :param train_datasets:
-    :param N_draws:
-    :param N_grad_steps:
-    :param eval_positions:
-    :param eval_positions_test:
-    :param bptt:
-    :param bptt_final:
-    :param style:
-    :param n_parallel_configurations:
-    :param device:
-    :param selection_metric:
-    :param final_splits:
-    :param N_ensemble_configurations_list:
-    :param kwargs:
-    :return:
-    """
     print("setting torch, numpy, random seed to 0")
     torch.manual_seed(0)
     np.random.seed(0)
@@ -229,24 +206,6 @@ def gradient_optimize_style(
     selection_metric_min_max="max",
     **kwargs,
 ):
-    """
-    Uses gradient based methods to optimize 'style' on the 'train_datasets' and uses stopping with 'valid_datasets'.
-
-    :param model:
-    :param init_style:
-    :param steps:
-    :param learning_rate:
-    :param softmax_temperature:
-    :param train_datasets:
-    :param valid_datasets:
-    :param optimize_all:
-    :param limit_style:
-    :param N_datasets_sampled:
-    :param optimize_softmax_temperature:
-    :param selection_metric_min_max:
-    :param kwargs:
-    :return:
-    """
     grad_style = torch.nn.Parameter(init_style.detach(), requires_grad=True)
 
     best_style, best_temperature, best_selection_metric, best_diffable_metric = (
@@ -304,18 +263,15 @@ def gradient_optimize_style(
     for t in tqdm(range(steps), desc="Iterate over Optimization steps"):
         optimizer.zero_grad()
 
-        # Select subset of datasets
         random.seed(t)
         train_datasets_ = random.sample(train_datasets, N_datasets_sampled)
 
-        # Get score on train
         diffable_metric_train, selection_metric_train = eval_all_datasets(
             train_datasets_, propagate=True
         )
         optimization_route_selection += [float(selection_metric_train)]
         optimization_route_diffable += [float(diffable_metric_train)]
 
-        # Get score on valid
         diffable_metric_valid, selection_metric_valid = eval_all_datasets(
             valid_datasets, propagate=False
         )
@@ -350,7 +306,6 @@ def gradient_optimize_style(
             + f"Train: Diffable metric={diffable_metric_train} Selection metric={selection_metric_train}"
         )
 
-    print(f"Return best:{best_style} {best_selection_metric}")
     return {
         "best_style": best_style,
         "best_temperature": best_temperature,

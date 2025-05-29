@@ -8,22 +8,33 @@ import pickle
 import io
 import numpy as np
 import warnings
+import joblib
+import json
+import glob
+import shutil
 
 sys.path.append("../")
 
 from torch.utils.checkpoint import checkpoint
 from tunetables.train_loop import reload_config, train_function
-from tunetables.utils import normalize_data, to_ranking_low_mem, remove_outliers
-from tunetables.utils import NOP, normalize_by_used_features_f
-from tunetables.scripts.model_builder import load_model, load_model_only_inference, get_model
-from tunetables.train import real_data_eval_out, real_data_eval
-from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
-
-from sklearn.base import BaseEstimator, ClassifierMixin
+from tunetables.utils import (
+    normalize_data,
+    to_ranking_low_mem,
+    remove_outliers,
+    normalize_by_used_features_f,
+)
+from tunetables.scripts.model_builder import (
+    load_model,
+    load_model_only_inference,
+    get_model,
+)
+from tunetables.train import real_data_eval_out
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils import column_or_1d
 from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
+from sklearn.base import BaseEstimator, ClassifierMixin
 from pathlib import Path
 
 
@@ -572,7 +583,6 @@ def transformer_predict(
     labels = torch.split(labels, batch_size_inference, dim=1)
     outputs = []
     for batch_input, batch_label in zip(inputs, labels):
-
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
@@ -647,7 +657,9 @@ def get_params_from_config(c):
 
 
 class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
-    def __init__(self, model_file=None, only_inference=False, device="cpu", user_args=None):
+    def __init__(
+        self, model_file=None, only_inference=False, device="cpu", user_args=None
+    ):
         self.only_inference = only_inference
         self.device = device
         self.model_file = model_file
@@ -677,7 +689,7 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
         args.resume = "../models/prior_diff_real_checkpoint_n_0_epoch_42.cpkt"
         args.save_path = "./logs"
         args.prior_type = "real"
-        args.data_path = ""  
+        args.data_path = ""
         args.prompt_tuning = True
         args.tuned_prompt_size = 10
         args.tuned_prompt_label_balance = "equal"
@@ -742,7 +754,11 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
 
         if self.only_inference:
             model, _ = load_model_only_inference(
-                self.base_path, self.model_file, self.device, prefix_size=10, n_classes=2
+                self.base_path,
+                self.model_file,
+                self.device,
+                prefix_size=10,
+                n_classes=2,
             )
             self.model = model[2]
             _, _, _, _, self.data_for_fitting, self.perm_map = get_model(
@@ -754,8 +770,8 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
                 x_wrapper=x,
                 y_wrapper=y,
                 cat_idx=cat_idx,
-                get_dataset=True
-           )
+                get_dataset=True,
+            )
         else:
             self.model, self.data_for_fitting, _ = train_function(
                 self.config.copy(),
@@ -773,7 +789,7 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
     def predict(self, x, cat_idx=[]):
         assert isinstance(x, np.ndarray), "x must be a numpy array"
 
-        self.config["epochs"] = 0  
+        self.config["epochs"] = 0
         _, _, test_loader = train_function(
             self.config,
             0,
@@ -794,7 +810,7 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
     def predict_proba(self, x, cat_idx=[]):
         assert isinstance(x, np.ndarray), "x must be a numpy array"
 
-        self.config["epochs"] = 0 
+        self.config["epochs"] = 0
         _, _, test_loader = train_function(
             self.config,
             0,
@@ -809,39 +825,40 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
             val_dl=test_loader,
             cl=self.eval_pos,
             train_data=self.data_for_fitting,
-            return_probs=True
+            return_probs=True,
         )
         print(out)
         return out[1]
 
 
-
-
-import joblib
-import json
-
-class TuneTablesClassifier2(BaseEstimator, ClassifierMixin):
-    def __init__(self, prefitted_only=False, device="cpu", user_args=None):
-
+class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
+    def __init__(
+        self, prefitted_only=False, device="cpu", epoch=10, batch_size=4, lr=0.1
+    ):
+        self.lr = lr
+        self.batch_size = batch_size
+        self.epoch = epoch
         self.prefitted_only = prefitted_only
-        self.pretrained_model_file = os.path.join("checkpoints")
+        self.base_path = pathlib.Path(__file__).parent.parent.resolve()
+        self.model_base_path = pathlib.Path(__file__).parent.parent.parent.resolve()
+        self.log_path = os.path.join(self.base_path, "logs")
+        self.pretrained_model_file = os.path.join(
+            self.model_base_path,
+            "models",
+            "prior_diff_real_checkpoint_n_0_epoch_42.cpkt",
+        )
 
         self.device = device
         self.model_file = self.pretrained_model_file
-        self.base_path = pathlib.Path(__file__).parent.parent.resolve()
 
         class Args:
             pass
 
-        args = Args()
+        self.args = Args()
 
-        args = self.get_default_config(args)
+        self.args = self.get_default_config(self.args)
 
-        if user_args is not None:
-            for k, v in user_args.items():
-                setattr(args, k, v)
-
-        self.config, self.model_string = reload_config(longer=1, args=args)
+        self.config, self.model_string = reload_config(longer=1, args=self.args)
         self.config["wandb_log"] = False
 
         import ConfigSpace
@@ -851,20 +868,20 @@ class TuneTablesClassifier2(BaseEstimator, ClassifierMixin):
                 self.config[k] = v.default_value
 
     def get_default_config(self, args):
-        args.resume = "../models/prior_diff_real_checkpoint_n_0_epoch_42.cpkt"
+        args.resume = self.pretrained_model_file
         args.save_path = "./logs"
         args.prior_type = "real"
-        args.data_path = ""  
+        args.data_path = ""
         args.prompt_tuning = True
         args.tuned_prompt_size = 10
         args.tuned_prompt_label_balance = "equal"
-        args.lr = 0.1
-        args.batch_size = 4
+        args.lr = self.lr
+        args.batch_size = self.batch_size
         args.bptt = 1152
         args.uniform_bptt = False
-        args.seed = 0
+        args.seed = 42
         args.early_stopping = 5
-        args.epochs = 10
+        args.epochs = self.epoch
         args.num_eval_fitting_samples = 1000
         args.split = 0
         args.boosting = False
@@ -912,27 +929,12 @@ class TuneTablesClassifier2(BaseEstimator, ClassifierMixin):
         return args
 
     def _fit_only_prefitted(self, X, y):
-
         model, _ = load_model_only_inference(
             self.base_path, self.model_file, self.device, prefix_size=10, n_classes=2
         )
-        model = model[2]
-        _, _, _, _, data_for_fitting, perm_map = get_model(
-            self.config,
-            self.config["device"],
-            should_train=True,
-            state_dict=self.config["state_dict"],
-            is_wrapper=True,
-            x_wrapper=X,
-            y_wrapper=y,
-            cat_idx=[],
-            get_dataset=True
-        )
-
-        return model, data_for_fitting, perm_map
+        return model[2]
 
     def _fit(self, X, y):
-
         model, data_for_fitting, _ = train_function(
             self.config.copy(),
             0,
@@ -944,39 +946,32 @@ class TuneTablesClassifier2(BaseEstimator, ClassifierMixin):
         )
 
         return model, data_for_fitting
-        
 
     def fit(self, X, y):
-
         x = X
         assert isinstance(x, np.ndarray), "x must be a numpy array"
         assert isinstance(y, np.ndarray), "x must be a numpy array"
         assert len(x.shape) == 2, "x must be a 2D array (samples, features)"
         assert len(y.shape) == 1, "y must be a 1D array"
-        
+
         if not self.prefitted_only:
             self.model, self.data_for_fitting = self._fit(X, y)
         else:
-            self.model, self.data_for_fitting, _ = self._fit_only_prefitted(X, y)
-        
+            self.model = self._fit_only_prefitted(X, y)
+
         self.eval_pos = self.data_for_fitting[0].shape[0]
-        print(f"Evaluation position: {self.eval_pos}")
         self.num_classes = len(np.unique(y))
 
         self._x_train = x
         self._y_train = y
 
     def predict_proba(self, X):
-
         x = X
-
         cat_idx = []
-        
         assert isinstance(x, np.ndarray), "x must be a numpy array"
 
-        self.model, self.data_for_fitting, self.perm_map = self._fit_only_prefitted(self._x_train, self._y_train)
-
-        self.config["epochs"] = 0 
+        self.model = self._fit_only_prefitted(self._x_train, self._y_train)
+        self.config["epochs"] = 0
         _, _, test_loader = train_function(
             self.config,
             0,
@@ -991,36 +986,51 @@ class TuneTablesClassifier2(BaseEstimator, ClassifierMixin):
             val_dl=test_loader,
             cl=self.eval_pos,
             train_data=self.data_for_fitting,
-            return_probs=True
+            return_probs=True,
         )
-        print(out)
         return out[1]
 
     def save_model(self, model_dir: str):
+        def copy_ckpts(src_dir, dst_dir):
+            os.makedirs(dst_dir, exist_ok=True)
+            files = glob.glob(os.path.join(src_dir, "*.cpkt"))
+            if files:
+                latest_file = max(files, key=os.path.getmtime)
+                dst_file = os.path.join(dst_dir, "model.cpkt")
+                shutil.copy(latest_file, dst_file)
+            else:
+                print("No .ckpt files found.")
+
+            npy_files = glob.glob(os.path.join(src_dir, "*.npy"))
+            for npy_file in npy_files:
+                shutil.copy(npy_file, dst_dir)
+
         args = self.args
         config = self.config
+
         other_metadata = {
             "prefitted_only": self.prefitted_only,
             "model_string": self.model_string,
             "eval_pos": self.eval_pos,
             "num_classes": self.num_classes,
             "device": self.device,
-            "pretrained_model_file": self.pretrained_model_file
+            "pretrained_model_file": self.pretrained_model_file,
         }
 
         data = {
             "x_train": self._x_train,
             "y_train": self._y_train,
-            "data_for_fitting": self.data_for_fitting
+            "data_for_fitting": self.data_for_fitting,
         }
         with open(os.path.join(model_dir, "metadata.json"), "w") as f:
-            json.dump({"args": args, "config": config, "other": other_metadata}, f)
-        joblib.dump(os.path.join(model_dir, "training_data.joblib"), data)
-        
-        logs_model_file = "PATH TO LAST MODEL CHECKPOINT"
-        persistent_model_file = os.path.join(model_dir, "model.ckpt")
-        os.copy(logs_model_file, persistent_model_file)
+            json.dump(
+                {"args": args, "config": config, "other": other_metadata},
+                f,
+                default=str,
+            )
+        joblib.dump(data, os.path.join(model_dir, "training_data.joblib"))
 
+        copy_ckpts(self.log_path, model_dir)
 
     @classmethod
     def load_model(cls, model_dir: str):
@@ -1030,23 +1040,13 @@ class TuneTablesClassifier2(BaseEstimator, ClassifierMixin):
         obj.args = metadata["args"]
         obj.config = metadata["config"]
         obj.model_string = metadata["other"]["model_string"]
+        obj.num_classes = metadata["other"]["num_classes"]
+        obj.eval_pos = metadata["other"]["eval_pos"]
         obj.device = metadata["other"]["device"]
-        # TODO put the rest!!!!
         data = joblib.load(os.path.join(model_dir, "training_data.joblib"))
         obj._x_train = data["x_train"]
         obj._y_train = data["y_train"]
         obj.data_for_fitting = data["data_for_fitting"]
 
-        obj.model_file = os.path.join(model_dir, "model.ckpt")
+        obj.model_file = os.path.join(model_dir, "model.cpkt")
         return obj
-
-
-if __name__ == "__main__":
-
-    model = TuneTablesClassifier2(prefitted_only=True)
-
-    model.fit(X,y)
-    model.save_model("my_model")
-
-    model = TuneTablesClassifier2.load_model("my_model")
-    y_hat = model.predict_proba(X)[:, 1]
