@@ -61,7 +61,6 @@ class TestTuneTablesClassifierFit(unittest.TestCase):
         model.save_model("my_model")
 
 
-
 class TestTuneTablesClassifierLoadWithClassImbalance(unittest.TestCase):
     def test_main(self):
         _, X_test, y_train, y_test = make_random_dataset()

@@ -56,6 +56,32 @@ class CustomUnpickler(pickle.Unpickler):
             return super().find_class(module, name)
 
 
+
+def check_file(model_base_path, model_dir, file_name):
+    model_path = os.path.join(model_base_path, model_dir)
+    file_path = os.path.join(model_path, file_name)
+    if not Path(file_path).is_file():
+        import requests
+        print("No checkpoint found at", file_path)
+        print("Downloading Base TabPFN checkpoint (~100 MB)…")
+
+        os.makedirs(model_path, exist_ok=True)
+
+        url = (
+            "https://raw.githubusercontent.com/"
+            "Abellegese/TuneTables/main/"
+            "tunetables/models/"
+            "prior_diff_real_checkpoint_n_0_epoch_42.cpkt"
+        )
+        r = requests.get(url, allow_redirects=True)
+        r.raise_for_status()
+
+        with open(file_path, "wb") as f:
+            f.write(r.content)
+
+    return file_path
+
+
 def load_model_workflow(
     i,
     e,
@@ -832,9 +858,7 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
 
 
 class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
-    def __init__(
-        self, device="cpu", epoch=10, batch_size=4, lr=0.1
-    ):
+    def __init__(self, device="cpu", epoch=10, batch_size=4, lr=0.1):
         self.lr = lr
         self.batch_size = batch_size
         self.epoch = epoch
@@ -846,7 +870,11 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
             "models",
             "prior_diff_real_checkpoint_n_0_epoch_42.cpkt",
         )
-
+        check_file(
+            self.model_base_path,
+            "models",
+            "prior_diff_real_checkpoint_n_0_epoch_42.cpkt",
+        )
         self.device = device
         self.model_file = self.pretrained_model_file
 
