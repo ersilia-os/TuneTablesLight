@@ -1043,6 +1043,8 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
             "y_train": self._y_train,
             "data_for_fitting": self.data_for_fitting,
         }
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir, exist_ok=True)
         with open(os.path.join(model_dir, "metadata.json"), "w") as f:
             json.dump(
                 {"args": args, "config": config, "other": other_metadata},
