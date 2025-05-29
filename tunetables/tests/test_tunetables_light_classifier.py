@@ -46,11 +46,18 @@ class TestTuneTablesClassifierFit(unittest.TestCase):
 
         model = TuneTablesClassifierLight(epoch=10, device="cuda")
         model.fit(X_train, y_train)
-        predictions = model.predict_proba(X_test)
-        print(f"predictions: {predictions}")
-        predictions = np.argmax(predictions, axis=1)
-        accuracy = accuracy_score(y_test, predictions)
+        y_hat = model.predict_proba(X_test)
+        y_hat = np.argmax(y_hat, axis=1)
+        accuracy = accuracy_score(y_test, y_hat)
         print(f"Accuracy: {accuracy}")
+        n_classes = y_hat.shape[1]
+        if n_classes == 2:
+            positive_class_ix = 1
+            auc = roc_auc_score(y_test, y_hat[:, positive_class_ix])
+            print(f"ROC-AUC (binary): {auc:.4f}")
+        else:
+            auc = roc_auc_score(y_test, y_hat, multi_class="ovr", average="macro")
+            print(f"ROC-AUC (multiclass, macro): {auc:.4f}")
         model.save_model("my_model")
 
 
@@ -61,20 +68,16 @@ class TestTuneTablesClassifierLoadWithClassImbalance(unittest.TestCase):
         model = TuneTablesClassifierLight.load_model("my_model")
         y_hat = model.predict_proba(X_test)
 
-        # Accuracy
         y_pred = np.argmax(y_hat, axis=1)
         accuracy = accuracy_score(y_test, y_pred)
         print(f"Accuracy: {accuracy:.4f}")
 
-        # AUC
         n_classes = y_hat.shape[1]
         if n_classes == 2:
-            # Binary classification: use the probability of the “positive” class
             positive_class_ix = 1
             auc = roc_auc_score(y_test, y_hat[:, positive_class_ix])
             print(f"ROC-AUC (binary): {auc:.4f}")
         else:
-            # Multiclass: one-vs-rest, macro-average
             auc = roc_auc_score(y_test, y_hat, multi_class="ovr", average="macro")
             print(f"ROC-AUC (multiclass, macro): {auc:.4f}")
 

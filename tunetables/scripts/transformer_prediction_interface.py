@@ -839,7 +839,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         self.batch_size = batch_size
         self.epoch = epoch
         self.base_path = pathlib.Path(__file__).parent.parent.resolve()
-        self.model_base_path = pathlib.Path(__file__).parent.parent.parent.resolve()
+        self.model_base_path = pathlib.Path(__file__).parent.parent.resolve()
         self.log_path = os.path.join(self.base_path, "logs")
         self.pretrained_model_file = os.path.join(
             self.model_base_path,
