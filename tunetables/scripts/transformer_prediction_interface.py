@@ -833,12 +833,11 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
 
 class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
     def __init__(
-        self, prefitted_only=False, device="cpu", epoch=10, batch_size=4, lr=0.1
+        self, device="cpu", epoch=10, batch_size=4, lr=0.1
     ):
         self.lr = lr
         self.batch_size = batch_size
         self.epoch = epoch
-        self.prefitted_only = prefitted_only
         self.base_path = pathlib.Path(__file__).parent.parent.resolve()
         self.model_base_path = pathlib.Path(__file__).parent.parent.parent.resolve()
         self.log_path = os.path.join(self.base_path, "logs")
@@ -869,7 +868,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
 
     def get_default_config(self, args):
         args.resume = self.pretrained_model_file
-        args.save_path = "./logs"
+        args.save_path = self.log_path
         args.prior_type = "real"
         args.data_path = ""
         args.prompt_tuning = True
