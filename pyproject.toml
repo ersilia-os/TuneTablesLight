@@ -32,12 +32,16 @@ classifiers = [
 [tool.hatch.build]
 exclude = [
   "*.cpkt",
+  "tunetables/models/*.cpkt",
   "tunetables/data/*",
   "tunetables/logs/*",
   "tunetables/config/*",
   "tunetables/wandb/*",
   "tunetables/datasets/*.pickle",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["tunetables"]
 
 [project.optional-dependencies]
 full = [
