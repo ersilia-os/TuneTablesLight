@@ -66,10 +66,9 @@ def check_file(model_base_path, model_dir, file_name):
         print("Downloading Base TabPFN checkpoint (~100 MB)…")
 
         os.makedirs(model_path, exist_ok=True)
-
         url = (
             "https://raw.githubusercontent.com/"
-            "Abellegese/tunetables_light/main/"
+            "Abellegese/TuneTables/main/"
             "tunetables_light/models/"
             "prior_diff_real_checkpoint_n_0_epoch_42.cpkt"
         )
