@@ -1,5 +1,5 @@
-DATA_PATH="/home/xxxxx/TuneTables/tunetables/data/openml__higgs__146606"
-RESUME="/home/xxxxx/TuneTables/tunetables/models_diff/prior_diff_real_checkpoint_n_0_epoch_42.cpkt"
+DATA_PATH="/home/xxxxx/tunetables_light/tunetables_light/data/openml__higgs__146606"
+RESUME="/home/xxxxx/tunetables_light/tunetables_light/models_diff/prior_diff_real_checkpoint_n_0_epoch_42.cpkt"
 EPOCHS=31
 
 # Learning rate, gradient aggregation (epochs, AdamW)

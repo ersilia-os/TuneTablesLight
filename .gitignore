@@ -12,7 +12,7 @@ metadata
 driver_installer.run
 
 # datasets
-tunetables/data/*
+tunetables_light/data/*
 tabpfn/*
 
 # results and outfiles
@@ -22,8 +22,8 @@ tabpfn/*
 */_multiclass_*/
 */catboost_info/
 */AutogluonModels/
-tunetables/runlog*
-tunetables/run_commands.sh
+tunetables_light/runlog*
+tunetables_light/run_commands.sh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

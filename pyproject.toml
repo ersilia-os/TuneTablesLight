@@ -32,16 +32,16 @@ classifiers = [
 [tool.hatch.build]
 exclude = [
   "*.cpkt",
-  "tunetables/models/*.cpkt",
-  "tunetables/data/*",
-  "tunetables/logs/*",
-  "tunetables/config/*",
-  "tunetables/wandb/*",
-  "tunetables/datasets/*.pickle",
+  "tunetables_light/models/*.cpkt",
+  "tunetables_light/data/*",
+  "tunetables_light/logs/*",
+  "tunetables_light/config/*",
+  "tunetables_light/wandb/*",
+  "tunetables_light/datasets/*.pickle",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["tunetables"]
+packages = ["tunetables_light"]
 
 [project.optional-dependencies]
 full = [
@@ -56,4 +56,4 @@ full = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/Abellegese/TuneTables/"
+"Homepage" = "https://github.com/Abellegese/tunetables_light/"

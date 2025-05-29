@@ -116,7 +116,7 @@ tunetables-long #the algorithm collection used for the results in our paper (not
 tunetables-short #an abbreviated version of TuneTables which runs much faster on large datasets, at the cost of some accuracy
 ```
 
-The complete list of prompt-tuning and fine-tuning tuning tasks can be found in `tunetables/batch/all_tasks.py`.
+The complete list of prompt-tuning and fine-tuning tuning tasks can be found in `tunetables_light/batch/all_tasks.py`.
 
 ### Zero-Shot Tasks
 
