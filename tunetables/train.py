@@ -835,12 +835,14 @@ def train(
             prediction_list = []
             target_list = []
             output_list = []
-            for batch, (data, targets, _) in tqdm(
-                val_dl,
-                desc="Running Evaluation",
-                unit="batch",
-                colour="green",
-                ncols=80,
+            for batch, (data, targets, _) in enumerate(
+                tqdm(
+                    val_dl,
+                    desc="Running Evaluation",
+                    unit="batch",
+                    colour="green",
+                    ncols=80,
+                )
             ):
                 if extra_prior_kwargs_dict.get("debug", False):
                     data_temp_idx = torch.randperm(data[1].nelement())

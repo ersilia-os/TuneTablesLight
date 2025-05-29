@@ -953,11 +953,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         assert len(x.shape) == 2, "x must be a 2D array (samples, features)"
         assert len(y.shape) == 1, "y must be a 1D array"
 
-        if not self.prefitted_only:
-            self.model, self.data_for_fitting = self._fit(X, y)
-        else:
-            self.model = self._fit_only_prefitted(X, y)
-
+        self.model, self.data_for_fitting = self._fit(X, y)
         self.eval_pos = self.data_for_fitting[0].shape[0]
         self.num_classes = len(np.unique(y))
 
@@ -1008,7 +1004,6 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         config = self.config
 
         other_metadata = {
-            "prefitted_only": self.prefitted_only,
             "model_string": self.model_string,
             "eval_pos": self.eval_pos,
             "num_classes": self.num_classes,

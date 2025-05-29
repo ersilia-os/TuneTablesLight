@@ -1,7 +1,7 @@
 import unittest
 
 import numpy as np
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.datasets import fetch_covtype
 from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
@@ -18,7 +18,7 @@ def make_random_dataset():
         n_redundant=0,
         n_repeated=0,
         n_classes=2,
-        weights=[0.998, 0.002],  # ~99 800 negatives, ~200 positives
+        weights=[0.5, 0.5],  # ~99 800 negatives, ~200 positives
         flip_y=0,
         class_sep=1.0,
         random_state=42,
@@ -54,14 +54,29 @@ class TestTuneTablesClassifierFit(unittest.TestCase):
         model.save_model("my_model")
 
 
+
 class TestTuneTablesClassifierLoadWithClassImbalance(unittest.TestCase):
     def test_main(self):
-        _, X_test, y_trai_n, y_test = make_random_dataset()
+        _, X_test, y_train, y_test = make_random_dataset()
         model = TuneTablesClassifierLight.load_model("my_model")
         y_hat = model.predict_proba(X_test)
+
+        # Accuracy
         y_pred = np.argmax(y_hat, axis=1)
         accuracy = accuracy_score(y_test, y_pred)
         print(f"Accuracy: {accuracy:.4f}")
+
+        # AUC
+        n_classes = y_hat.shape[1]
+        if n_classes == 2:
+            # Binary classification: use the probability of the “positive” class
+            positive_class_ix = 1
+            auc = roc_auc_score(y_test, y_hat[:, positive_class_ix])
+            print(f"ROC-AUC (binary): {auc:.4f}")
+        else:
+            # Multiclass: one-vs-rest, macro-average
+            auc = roc_auc_score(y_test, y_hat, multi_class="ovr", average="macro")
+            print(f"ROC-AUC (multiclass, macro): {auc:.4f}")
 
 
 class TestTuneTablesClassifierLoad(unittest.TestCase):
