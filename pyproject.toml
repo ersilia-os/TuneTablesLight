@@ -3,15 +3,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "tunetables"
+name = "tunetables_light"
 version = "0.3.1"
 authors = [
-{name="Benjamin Feuer"},
-{name="Niv Cohen"},
-{name="Colin White"},
-{name="Valeriia Cherepanova"},
+{name="Abel Legese"},
 ]
-description = "TuneTables is a tabular classification framework that extends the capabilities of pretrained prior-fitted networks like TabPFN'"
+description = "A light weight implementation of TuneTables, a tabular classifier that implements prompt tuning for frozen prior-fitted networks."
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies=[
@@ -34,9 +31,7 @@ classifiers = [
 
 [tool.hatch.build]
 exclude = [
-  "*.cpkt",
   "tunetables/data/*",
-  "tunetables/logs/*",
   "tunetables/config/*",
   "tunetables/wandb/*",
   "tunetables/datasets/*.pickle",
@@ -55,4 +50,4 @@ full = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/penfever/TuneTables/"
+"Homepage" = "https://github.com/Abellegese/TuneTables/"
