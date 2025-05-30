@@ -886,11 +886,15 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         self,
         device="cpu",
         epoch=10,
-        batch_size=4,
+        batch_size=16,
         lr=0.1,
+        tuned_prompt_size = 10,
+        prompt_tuning=True,
         no_preprocess_mode=False,
         no_grad=True,
     ):
+        self.prompt_tuning = prompt_tuning
+        self.tuned_prompt_size = tuned_prompt_size
         self.batch_size_inference = 1
         self.no_preprocess_mode = no_preprocess_mode
         self.no_grad = no_grad
