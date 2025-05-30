@@ -1032,7 +1032,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         self.model, self.c = self._fit_only_prefitted(self._x_train, self._y_train)
 
         if self.no_grad:
-            X = check_array(X, ensure_all_finite=False)
+            X = check_array(X, force_all_finite=False)
             X_full = np.concatenate([self._x_train, X], axis=0)
             X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
         else:

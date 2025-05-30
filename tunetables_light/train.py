@@ -180,7 +180,7 @@ def train(
     bptt=10,
     lr=None,
     weight_decay=0.0,
-    warmup_epochs=3,
+    warmup_epochs=10,
     input_normalization=False,
     y_encoder_generator=None,
     pos_encoder_generator=None,

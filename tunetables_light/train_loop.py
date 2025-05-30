@@ -193,7 +193,7 @@ def reload_config(config_type="causal", task_type="multiclass", longer=0, args=N
     config["bptt_search"] = args.bptt_search
     config["aggregate_k_gradients"] = args.aggregate_k_gradients
     config["epochs"] = args.epochs
-    config["warmup_epochs"] = args.epochs // 3
+    config["warmup_epochs"] = args.epochs // 100
     if args.real_data_qty > 0:
         config["real_data_qty"] = args.real_data_qty
 
