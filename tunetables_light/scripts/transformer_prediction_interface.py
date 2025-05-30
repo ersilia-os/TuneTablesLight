@@ -36,6 +36,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
 from sklearn.base import BaseEstimator, ClassifierMixin
 from pathlib import Path
+from tqdm.auto import tqdm
 
 
 class CustomUnpickler(pickle.Unpickler):
@@ -56,12 +57,12 @@ class CustomUnpickler(pickle.Unpickler):
             return super().find_class(module, name)
 
 
-
 def check_file(model_base_path, model_dir, file_name):
     model_path = os.path.join(model_base_path, model_dir)
     file_path = os.path.join(model_path, file_name)
     if not Path(file_path).is_file():
         import requests
+
         print("No checkpoint found at", file_path)
         print("Downloading Base TabPFN checkpoint (~100 MB)…")
 
@@ -607,6 +608,7 @@ def transformer_predict(
     labels = torch.cat(labels, 1)
     labels = torch.split(labels, batch_size_inference, dim=1)
     outputs = []
+
     for batch_input, batch_label in zip(inputs, labels):
         with warnings.catch_warnings():
             warnings.filterwarnings(
@@ -628,7 +630,7 @@ def transformer_predict(
                     use_reentrant=True,
                 )
             else:
-                with torch.cuda.amp.autocast(enabled=fp16_inference):
+                with torch.amp.autocast(device_type=device, enabled=fp16_inference):
                     output_batch = checkpoint(
                         predict,
                         batch_input,
@@ -644,7 +646,15 @@ def transformer_predict(
     if return_early:
         return outputs
 
-    for i, ensemble_configuration in enumerate(ensemble_configurations):
+    for i, ensemble_configuration in enumerate(
+        tqdm(
+            ensemble_configurations,
+            desc="Running Inference",
+            unit="batch",
+            colour="blue",
+            ncols=80,
+        )
+    ):
         (
             (class_shift_configuration, feature_shift_configuration),
             preprocess_transform_configuration,
@@ -808,7 +818,6 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
                 cat_idx=cat_idx,
             )
         self.eval_pos = self.data_for_fitting[0].shape[0]
-        print(f"Evaluation position: {self.eval_pos}")
         self.num_classes = len(np.unique(y))
 
     def predict(self, x, cat_idx=[]):
@@ -831,6 +840,22 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
             val_dl=test_loader,
         )
         return out[1]
+
+    def predict(
+        self,
+        X,
+        return_winning_probability=False,
+        normalize_with_test=False,
+        return_early=False,
+    ):
+        p = self.predict_proba(
+            X, normalize_with_test=normalize_with_test, return_early=return_early
+        )
+        y = np.argmax(p, axis=-1)
+        y = self.classes_.take(np.asarray(y, dtype=np.intp))
+        if return_winning_probability:
+            return y, p.max(axis=-1)
+        return y
 
     def predict_proba(self, x, cat_idx=[]):
         assert isinstance(x, np.ndarray), "x must be a numpy array"
@@ -857,7 +882,18 @@ class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
 
 
 class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
-    def __init__(self, device="cpu", epoch=10, batch_size=4, lr=0.1):
+    def __init__(
+        self,
+        device="cpu",
+        epoch=10,
+        batch_size=4,
+        lr=0.1,
+        no_preprocess_mode=False,
+        no_grad=True,
+    ):
+        self.batch_size_inference = 1
+        self.no_preprocess_mode = no_preprocess_mode
+        self.no_grad = no_grad
         self.lr = lr
         self.batch_size = batch_size
         self.epoch = epoch
@@ -875,6 +911,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
             "prior_diff_real_checkpoint_n_0_epoch_42.cpkt",
         )
         self.device = device
+        self.classes_ = 2
         self.model_file = self.pretrained_model_file
 
         class Args:
@@ -955,10 +992,10 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         return args
 
     def _fit_only_prefitted(self, X, y):
-        model, _ = load_model_only_inference(
+        model, c = load_model_only_inference(
             self.base_path, self.model_file, self.device, prefix_size=10, n_classes=2
         )
-        return model[2]
+        return model[2], c
 
     def _fit(self, X, y):
         model, data_for_fitting, _ = train_function(
@@ -987,30 +1024,73 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         self._x_train = x
         self._y_train = y
 
-    def predict_proba(self, X):
-        x = X
-        cat_idx = []
-        assert isinstance(x, np.ndarray), "x must be a numpy array"
 
-        self.model = self._fit_only_prefitted(self._x_train, self._y_train)
-        self.config["epochs"] = 0
-        _, _, test_loader = train_function(
-            self.config,
-            0,
-            self.model_string,
-            is_wrapper=True,
-            x_wrapper=x,
-            y_wrapper=np.random.randint(self.num_classes, size=x.shape[0]),
-            cat_idx=cat_idx,
+    def predict_proba(
+        self, X, normalize_with_test=False, return_logits=False, return_early=False
+    ):
+        self.no_grad = True
+        self.model, self.c = self._fit_only_prefitted(self._x_train, self._y_train)
+
+        if self.no_grad:
+            X = check_array(X, ensure_all_finite=False)
+            X_full = np.concatenate([self._x_train, X], axis=0)
+            X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
+        else:
+            assert torch.is_tensor(self._x_train) & torch.is_tensor(X), (
+                "If no_grad is false, this function expects X as "
+                "a tensor to calculate a gradient"
+            )
+            X_full = (
+                torch.cat((self._x_train, X), dim=0)
+                .float()
+                .unsqueeze(1)
+                .to(self.device)
+            )
+
+            if int(torch.isnan(X_full).sum()):
+                print(
+                    "X contains nans and the gradient implementation is not designed to handel nans."
+                )
+
+        y_full = np.concatenate([self._y_train, np.zeros(shape=X.shape[0])], axis=0)
+        y_full = torch.tensor(y_full, device=self.device).float().unsqueeze(1)
+
+        eval_pos = self._x_train.shape[0]
+        prediction = transformer_predict(
+            self.model,
+            X_full,
+            y_full,
+            eval_pos,
+            device=self.device,
+            inference_mode=True,
+            preprocess_transform="none" if self.no_preprocess_mode else "mix",
+            normalize_with_test=normalize_with_test,
+            softmax_temperature=0,
+            return_logits=return_logits,
+            no_grad=self.no_grad,
+            batch_size_inference=self.batch_size_inference,
+            return_early=return_early,
+            **get_params_from_config(self.c),
         )
-        out = real_data_eval_out(
-            r_model=self.model,
-            val_dl=test_loader,
-            cl=self.eval_pos,
-            train_data=self.data_for_fitting,
-            return_probs=True,
+        prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
+
+        return prediction_.detach().cpu().numpy() if self.no_grad else prediction_
+
+    def predict_(
+        self,
+        X,
+        return_winning_probability=False,
+        normalize_with_test=False,
+        return_early=False,
+    ):
+        p = self.predict_proba(
+            X, normalize_with_test=normalize_with_test, return_early=return_early
         )
-        return out[1]
+        y = np.argmax(p, axis=-1)
+        y = self.classes_.take(np.asarray(y, dtype=np.intp))
+        if return_winning_probability:
+            return y, p.max(axis=-1)
+        return y
 
     def save_model(self, model_dir: str):
         def copy_ckpts(src_dir, dst_dir):

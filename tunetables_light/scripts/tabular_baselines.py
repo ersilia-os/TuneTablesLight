@@ -315,7 +315,9 @@ def transformer_metric(
     N_ensemble_configurations=3,
     classifier=None,
 ):
-    from tunetables_light.scripts.transformer_prediction_interface import TabPFNClassifier
+    from tunetables_light.scripts.transformer_prediction_interface import (
+        TabPFNClassifier,
+    )
 
     if classifier is None:
         classifier = TabPFNClassifier(

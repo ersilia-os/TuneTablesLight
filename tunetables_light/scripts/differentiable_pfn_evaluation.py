@@ -7,8 +7,12 @@ from tunetables_light.scripts.tabular_metrics import calculate_score_per_method
 from tunetables_light.scripts.tabular_evaluation import evaluate
 from tqdm import tqdm
 import random
-from tunetables_light.scripts.transformer_prediction_interface import get_params_from_config
-from tunetables_light.scripts.transformer_prediction_interface import load_model_workflow
+from tunetables_light.scripts.transformer_prediction_interface import (
+    get_params_from_config,
+)
+from tunetables_light.scripts.transformer_prediction_interface import (
+    load_model_workflow,
+)
 
 
 def eval_model_range(i_range, *args, **kwargs):

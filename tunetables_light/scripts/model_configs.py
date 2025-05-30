@@ -3,7 +3,9 @@ from tunetables_light.priors.utils import uniform_int_sampler_f
 from tunetables_light.priors.differentiable_prior import DifferentiableHyperparameter
 from ConfigSpace import hyperparameters as CSH
 import torch
-from tunetables_light.priors.differentiable_prior import replace_differentiable_distributions
+from tunetables_light.priors.differentiable_prior import (
+    replace_differentiable_distributions,
+)
 
 import ConfigSpace as CS
 

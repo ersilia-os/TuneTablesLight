@@ -225,25 +225,20 @@ class TransformerModel(nn.Module):
             "inputs (src) have to be given as (x,y) or (style,x,y) tuple"
         )
 
-        if len(src) == 2:  # (x,y) and no style
+        if len(src) == 2:  
             src = (None,) + src
 
         style_src, x_src, y_src = src
-        """
-        The encoder is a learned projection matrix from n_samples, n_features to n_samples, n_hidden
-        """
         x_src = self.encoder(x_src)
 
         if self.prefix_size > 0:
             single_eval_pos = single_eval_pos + self.prefix_size
-            # concatenate prefix embedding weights to x_src
             if len(x_src.shape) > len(self.prefix_embedding.weight.shape):
                 x_src = torch.cat([self.prefix_embedding.weight.unsqueeze(1), x_src], 0)
             elif len(x_src.shape) == len(self.prefix_embedding.weight.shape):
                 x_src = torch.cat([self.prefix_embedding.weight, x_src], 0)
             else:
                 x_src = torch.cat([x_src.unsqueeze(1), self.prefix_embedding.weight], 0)
-            # concatenate prefix embedding to y_src
             if len(y_src.shape) > len(self.prefix_y_embedding.shape):
                 y_src = torch.cat(
                     [
@@ -287,7 +282,6 @@ class TransformerModel(nn.Module):
                 1, x_src.shape[1], 1
             )
         )
-        # print("Shapes of prefix embedding, x_src, y_src: ", self.prefix_embedding.weight.shape, x_src.shape, y_src.shape)
         if src_mask is not None:
             assert self.global_att_embeddings is None or isinstance(src_mask, tuple)
         if src_mask is None:

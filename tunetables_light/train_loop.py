@@ -1,83 +1,13 @@
-import time
-from datetime import datetime
 import json
 import os
-
 import wandb
 import ConfigSpace
 
+from datetime import datetime
 from tunetables_light.scripts.model_builder import get_model, save_model
 from tunetables_light.scripts.model_configs import *
-from tunetables_light.priors.utils import uniform_int_sampler_f
 from tunetables_light.notebook_utils import *
 from tunetables_light.utils import make_serializable, wandb_init
-
-
-def train_function_2(
-    config_sample,
-    i=0,
-    add_name="",
-    is_wrapper=False,
-    x_wrapper=None,
-    y_wrapper=None,
-    cat_idx=[],
-):
-    if (
-        config_sample["boosting"]
-        or config_sample["rand_init_ensemble"]
-        or config_sample["bagging"]
-    ):
-        # don't save checkpoints for ensembling, just prefixes
-        save_every_k = config_sample["epochs"] + 1
-    else:
-        save_every_k = config_sample["save_every_k_epochs"]
-    epochs = []
-
-    def save_callback(model, epoch, values_to_log):
-        # NOTE: I think the 'epoch' value is actually 1 / config['epochs']
-        epochs.append(epoch)
-        if not hasattr(model, "last_saved_epoch"):
-            model.last_saved_epoch = 0
-        if len(epochs) % save_every_k == 0:
-            print("Saving model..")
-            config_sample["epoch_in_training"] = epoch
-            save_model(
-                model,
-                config_sample["base_path"],
-                f"prior_diff_real_checkpoint{add_name}_n_{i}_epoch_{model.last_saved_epoch}.cpkt",
-                config_sample,
-            )
-            model.last_saved_epoch = (
-                model.last_saved_epoch + 1
-            )  # TODO: Rename to checkpoint
-
-    def no_callback(model, epoch, values_to_log):
-        pass
-
-    if (
-        config_sample["boosting"]
-        or config_sample["rand_init_ensemble"]
-        or config_sample["bagging"]
-    ):
-        my_callback = no_callback
-    else:
-        my_callback = save_callback
-
-    model, results_dict, data_for_fitting, test_loader = get_model(
-        config_sample,
-        config_sample["device"],
-        should_train=True,
-        state_dict=config_sample["state_dict"],
-        epoch_callback=my_callback,
-        is_wrapper=is_wrapper,
-        x_wrapper=x_wrapper,
-        y_wrapper=y_wrapper,
-        cat_idx=cat_idx,
-    )
-    if is_wrapper:
-        return model, data_for_fitting, test_loader
-    else:
-        return results_dict
 
 
 def train_function(
@@ -263,7 +193,7 @@ def reload_config(config_type="causal", task_type="multiclass", longer=0, args=N
     config["bptt_search"] = args.bptt_search
     config["aggregate_k_gradients"] = args.aggregate_k_gradients
     config["epochs"] = args.epochs
-    config["warmup_epochs"] = args.epochs // 10
+    config["warmup_epochs"] = args.epochs // 3
     if args.real_data_qty > 0:
         config["real_data_qty"] = args.real_data_qty
 

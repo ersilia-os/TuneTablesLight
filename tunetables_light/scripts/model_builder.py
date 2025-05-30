@@ -348,10 +348,10 @@ def get_model(
             total_data_points = len(x_wrapper)
             indices = np.arange(total_data_points)
 
-            if config["epochs"] == 0:  
+            if config["epochs"] == 0:
                 train_indices = indices
                 val_indices = indices
-                num_classes = 2 
+                num_classes = 2
             else:
                 np.random.shuffle(indices)
                 train_size = int(0.85 * total_data_points)

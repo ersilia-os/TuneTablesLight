@@ -180,7 +180,7 @@ def train(
     bptt=10,
     lr=None,
     weight_decay=0.0,
-    warmup_epochs=10,
+    warmup_epochs=3,
     input_normalization=False,
     y_encoder_generator=None,
     pos_encoder_generator=None,
@@ -1122,12 +1122,6 @@ def train(
 
         total_loss = tracker.average()
 
-        if verbose:
-            print("train_epoch time: ", round(time.time() - epoch_start_time, 2))
-            print("time to get batches: ", round(time_to_get_batches, 2))
-            print("time in forward: ", round(forward_times, 2))
-            print("time in backward: ", round(backward_times, 2))
-
         return total_loss, None, time_to_get_batch, forward_time, step_time, None, None
 
     def concat_embedding(ec, model, method):
@@ -1603,13 +1597,10 @@ def train(
                     best_res_dict = res_dict
             if verbose:
                 get_time = time.time() - epoch_start_time
-                print("-" * 89)
+                print("-" * 78)
                 print(
                     f"| end of epoch {epoch:3d} | time: {get_time:5.2f}s | mean loss {total_loss:5.2f} | "
-                    f" | data time {time_to_get_batch:5.2f} | step time {step_time:5.2f}"
-                    f" | forward time {forward_time:5.2f}"
                     f" | val score {val_score}"
-                    f" | test score {test_score}"
                     if val_score is not None
                     else f" | val score nc {res_dict.get('Val_nc_Accuracy', 0)}"
                     if val_score_nc is not None
@@ -1619,7 +1610,7 @@ def train(
                     if res_dict.get("Test_nc_Accuracy", 0) is not None
                     else ""
                 )
-                print("-" * 89)
+                print("-" * 78)
                 if epoch_callback is not None and rank == 0:
                     epoch_callback(model, epoch / epochs, res_dict)
                 if val_score is not None:
@@ -1646,14 +1637,12 @@ def train(
                         extra_prior_kwargs_dict.get("save_path"),
                         f"{mstr}_{boost_iter}_log_{epoch}.json",
                     )
-                    # if not is_wrapper:
                     with open(log_path, "w") as f:
                         json.dump(res_dict, f, indent=4)
 
                 if NO_PATIENCE:
                     break
 
-            # stepping with wallclock time based scheduler
             t_sched.step()
 
         if (
@@ -1662,7 +1651,6 @@ def train(
             and isinstance(best_val_embed, torch.Tensor)
         ):
             t_model.prefix_embedding.weight = nn.Parameter(best_val_embed.to(device))
-            # set requires grad to true
             t_model.prefix_embedding.weight.requires_grad = True
             t_optim = torch.optim.AdamW(
                 t_model.parameters(), lr=lr, weight_decay=weight_decay
@@ -1685,7 +1673,6 @@ def train(
 
         return best_outputs, best_targets, best_res_dict
 
-    # Search for max bptt
     if extra_prior_kwargs_dict.get("bptt_search", False):
         backup_epochs = epochs
         epochs = 1
@@ -1740,7 +1727,6 @@ def train(
         epochs = backup_epochs
         extra_prior_kwargs_dict["uniform_bptt"] = backup_unif_bptt
 
-    # main training loop
     bagging = extra_prior_kwargs_dict.get("bagging", False)
     if bagging:
         split_size = extra_prior_kwargs_dict.get("subset_rows_bagging", 10000)
@@ -1803,7 +1789,6 @@ def train(
         )
         res_dict_ensemble[i] = best_results = results_dict
         prior_grad_dict = gradient_dict
-        # OUTPUT_DICT[0] contains val_outputs, test_outputs, val_outputs_nc, test_outputs_nc
 
         probs_np = output_dict[0][0]
         labels_np = test_targets[0]
@@ -1853,8 +1838,6 @@ def train(
         for i in range(1, boosting_n_iters):
             next_seed = extra_prior_kwargs_dict.get("rand_seed") + i
             seed_all(next_seed)
-
-            # extra_prior_kwargs_dict['rand_seed'] = next_seed
 
             if extra_prior_kwargs_dict.get("reseed_data", True):
                 extra_prior_kwargs_dict["do_impute"] = np.random.choice([True, False])
@@ -2113,7 +2096,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--bptt", default=10, type=int)
     parser.add_argument("--epochs", default=200, type=int)
-    parser.add_argument("--warmup_epochs", default=50, type=int)
+    parser.add_argument("--warmup_epochs", default=3, type=int)
     parser.add_argument("--validation_period", default=10, type=int)
     parser.add_argument(
         "--permutation_invariant_max_eval_pos",
