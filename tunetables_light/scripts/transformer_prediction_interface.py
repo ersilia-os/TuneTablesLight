@@ -888,7 +888,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         epoch=10,
         batch_size=16,
         lr=0.1,
-        tuned_prompt_size = 10,
+        tuned_prompt_size = 20,
         prompt_tuning=True,
         no_preprocess_mode=False,
         no_grad=True,
@@ -940,7 +940,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         args.prior_type = "real"
         args.data_path = ""
         args.prompt_tuning = True
-        args.tuned_prompt_size = 10
+        args.tuned_prompt_size = 20
         args.tuned_prompt_label_balance = "equal"
         args.lr = self.lr
         args.batch_size = self.batch_size
