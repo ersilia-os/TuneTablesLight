@@ -15,7 +15,7 @@ import tunetables_light.utils as utils
 from torch import nn
 from torch import autograd
 from torch.amp import autocast, GradScaler
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from sklearn.metrics import (
     accuracy_score,
     f1_score,

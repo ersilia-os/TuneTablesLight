@@ -81,6 +81,29 @@ def check_file(model_base_path, model_dir, file_name):
 
     return file_path
 
+def check_tabpfn_file(model_base_path, model_dir, file_name):
+    model_path = os.path.join(model_base_path, model_dir)
+    file_path = os.path.join(model_path, file_name)
+    if not Path(file_path).is_file():
+        import requests
+
+        print("No checkpoint found at", file_path)
+        print("Downloading Base TabPFN checkpoint (~100 MB)…")
+
+        os.makedirs(model_path, exist_ok=True)
+        url = (
+            "https://raw.githubusercontent.com/"
+            "Abellegese/TuneTables/main/"
+            "tunetables_light/models/"
+            "prior_diff_real_checkpoint_n_0_epoch_42.cpkt"
+        )
+        r = requests.get(url, allow_redirects=True)
+        r.raise_for_status()
+
+        with open(file_path, "wb") as f:
+            f.write(r.content)
+
+    return file_path
 
 def load_model_workflow(
     i,
@@ -154,7 +177,7 @@ def load_model_workflow(
     return model, c, results_file
 
 
-class TabPFNClassifier(BaseEstimator, ClassifierMixin):
+class TuneTablesZeroShotClassifier(BaseEstimator, ClassifierMixin):
     models_in_memory = {}
 
     def __init__(
@@ -162,7 +185,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         device="cpu",
         base_path=pathlib.Path(__file__).parent.parent.resolve(),
         model_string="",
-        N_ensemble_configurations=3,
+        N_ensemble_configurations=10,
         no_preprocess_mode=False,
         multiclass_decoder="permutation",
         feature_shift_decoder=True,
@@ -176,6 +199,12 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         n_classes=2,
     ):
         i = 0
+        self.model_base_path = pathlib.Path(__file__).parent.parent.resolve()
+        check_tabpfn_file(
+            self.model_base_path,
+            "models_diff",
+            "prior_diff_real_checkpoint_n_0_epoch_-1.cpkt",
+        )
         model_key = model_string + "|" + str(device)
         if model_key in self.models_in_memory and use_memory:
             print("Loading model from memory")
@@ -748,7 +777,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
 
         self.args = self.get_default_config(self.args)
 
-        self.config, self.model_string = reload_config(config_type="real", longer=1, args=self.args)
+        self.config, self.model_string = reload_config(longer=1, args=self.args)
         self.config["wandb_log"] = False
 
         import ConfigSpace
