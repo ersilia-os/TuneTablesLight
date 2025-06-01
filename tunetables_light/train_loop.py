@@ -144,7 +144,7 @@ def set_compatibility_params(config, args):
 def reload_config(config_type="causal", task_type="multiclass", longer=0, args=None):
     if config_type == "real":
         config = {
-            "dropout": 0.0,
+            "dropout": args.dropout,
             "emsize": 512,
             "nlayers": 12,
             "num_features": 100,
@@ -316,7 +316,6 @@ def reload_config(config_type="causal", task_type="multiclass", longer=0, args=N
     model_string = "_multiclass" + "_" + datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
 
     config["model_string"] = model_string
-
     return config, model_string
 
 

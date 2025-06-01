@@ -40,12 +40,13 @@ class TransformerModel(nn.Module):
         linear=False,
     ):
         super().__init__()
+        self.dropout = dropout
         self.model_type = "Transformer"
         encoder_layer_creator = lambda: TransformerEncoderLayer(
             ninp,
             nhead,
             nhid,
-            dropout,
+            self.dropout,
             activation=activation,
             pre_norm=pre_norm,
             recompute_attn=recompute_attn,
@@ -95,13 +96,13 @@ class TransformerModel(nn.Module):
         self.nhid = nhid
 
         self.init_weights()
-        print("Model initialized with following parameters: ")
+        print(f"Model initialized with following parameters: {self.dropout}")
         params = {
             "ninp": ninp,
             "nhead": nhead,
             "nhid": nhid,
             "nlayers": nlayers,
-            "dropout": dropout,
+            "dropout": self.dropout,
             "activation": activation,
             "recompute_attn": recompute_attn,
             "num_global_att_tokens": num_global_att_tokens,
@@ -196,11 +197,6 @@ class TransformerModel(nn.Module):
             param.requires_grad = grad_reqd
 
     def init_weights(self):
-        initrange = 1.0
-        # if isinstance(self.encoder,EmbeddingEncoder):
-        #    self.encoder.weight.data.uniform_(-initrange, initrange)
-        # self.decoder.bias.data.zero_()
-        # self.decoder.weight.data.uniform_(-initrange, initrange)
         if self.init_method is not None:
             self.apply(self.init_method)
         for layer in self.transformer_encoder.layers:
@@ -370,7 +366,6 @@ class TransformerModel(nn.Module):
             small_hid_dim = small_layer.linear1.out_features
             my_in_dim = my_layer.linear1.in_features
 
-            # packed along q,k,v order in first dim
             my_in_proj_w = my_layer.self_attn.in_proj_weight
             small_in_proj_w = small_layer.self_attn.in_proj_weight
 
@@ -410,13 +405,6 @@ class TransformerModel(nn.Module):
 
 
 class TransformerEncoderDiffInit(Module):
-    r"""TransformerEncoder is a stack of N encoder layers
-
-    Args:
-        encoder_layer_creator: a function generating objects of TransformerEncoderLayer class without args (required).
-        num_layers: the number of sub-encoder-layers in the encoder (required).
-        norm: the layer normalization component (optional).
-    """
 
     __constants__ = ["norm"]
 
@@ -434,16 +422,6 @@ class TransformerEncoderDiffInit(Module):
         mask: Optional[Tensor] = None,
         src_key_padding_mask: Optional[Tensor] = None,
     ) -> Tensor:
-        r"""Pass the input through the encoder layers in turn.
-
-        Args:
-            src: the sequence to the encoder (required).
-            mask: the mask for the src sequence (optional).
-            src_key_padding_mask: the mask for the src keys per batch (optional).
-
-        Shape:
-            see the docs in Transformer class.
-        """
         output = src
 
         for mod in self.layers:
@@ -455,20 +433,3 @@ class TransformerEncoderDiffInit(Module):
             output = self.norm(output)
 
         return output
-
-
-# class BoostedTransformer(TransformerModel):
-#     def __init__(self, encoder, n_out, ninp, nhead, nhid, nlayers, dropout=0.0, style_encoder=None, y_encoder=None,
-#                  pos_encoder=None, decoder=None, input_normalization=False, init_method=None, pre_norm=False,
-#                  activation='gelu', recompute_attn=False, num_global_att_tokens=0, full_attention=False,
-#                  all_layers_same_init=False, efficient_eval_masking=True, prefix_size=0, n_classes=2,
-#                  embed_path="embeddings", n_iters=10, boost_lr=1e-3):
-#         if prefix_size <= 0:
-#             raise ValueError("BoostedTransformer requires a positive prefix_size")
-#         super().__init__(encoder, n_out, ninp, nhead, nhid, nlayers, dropout=dropout, style_encoder=style_encoder, y_encoder=y_encoder, pos_encoder=pos_encoder, decoder=decoder, input_normalization=input_normalization, init_method=init_method, pre_norm=pre_norm, activation=activation, recompute_attn=recompute_attn, num_global_att_tokens=num_global_att_tokens, full_attention=full_attention, all_layers_same_init=all_layers_same_init, efficient_eval_masking=efficient_eval_masking, prefix_size=prefix_size, n_classes=n_classes)
-
-
-#     def forward(self, src, src_mask=None, single_eval_pos=None):
-#         super().forward(src, src_mask, single_eval_pos)
-
-#     def fit():

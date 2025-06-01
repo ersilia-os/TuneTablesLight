@@ -685,200 +685,10 @@ def transformer_predict(
 def get_params_from_config(c):
     return {
         "max_features": c["num_features"],
-        "rescale_features": c["normalize_by_used_features"],
+        "rescale_features": c.get("normalize_by_used_features", True),
         "normalize_to_ranking": c["normalize_to_ranking"],
         "normalize_with_sqrt": c.get("normalize_with_sqrt", False),
     }
-
-
-class TuneTablesClassifier(BaseEstimator, ClassifierMixin):
-    def __init__(
-        self, model_file=None, only_inference=False, device="cpu", user_args=None
-    ):
-        self.only_inference = only_inference
-        self.device = device
-        self.model_file = model_file
-        self.base_path = pathlib.Path(__file__).parent.parent.resolve()
-
-        class Args:
-            pass
-
-        args = Args()
-
-        args = self.get_default_config(args)
-
-        if user_args is not None:
-            for k, v in user_args.items():
-                setattr(args, k, v)
-
-        self.config, self.model_string = reload_config(longer=1, args=args)
-        self.config["wandb_log"] = False
-
-        import ConfigSpace
-
-        for k, v in self.config.items():
-            if isinstance(v, ConfigSpace.hyperparameters.CategoricalHyperparameter):
-                self.config[k] = v.default_value
-
-    def get_default_config(self, args):
-        args.resume = "../models/prior_diff_real_checkpoint_n_0_epoch_42.cpkt"
-        args.save_path = "./logs"
-        args.prior_type = "real"
-        args.data_path = ""
-        args.prompt_tuning = True
-        args.tuned_prompt_size = 10
-        args.tuned_prompt_label_balance = "equal"
-        args.lr = 0.1
-        args.batch_size = 4
-        args.bptt = 1152
-        args.uniform_bptt = False
-        args.seed = 0
-        args.early_stopping = 5
-        args.epochs = 10
-        args.num_eval_fitting_samples = 1000
-        args.split = 0
-        args.boosting = False
-        args.bagging = False
-        args.bptt_search = False
-        args.workers = 4
-        args.val_subset_size = 1000000
-        args.subset_features = 100
-        args.subsampling = 0
-        args.rand_init_ensemble = False
-        args.ensemble_lr = 0.5
-        args.ensemble_size = 5
-        args.reseed_data = False
-        args.aggregate_k_gradients = 1
-        args.average_ensemble = False
-        args.permute_feature_position_in_ensemble = False
-        args.concat_method = ""
-        args.save_every_k_epochs = 2
-        args.validation_period = 3
-        args.wandb_name = "tabpfn_pt_airlines"
-        args.wandb_log = False
-        args.wandb_group = "openml__colic__27_pt10_rdq_0_split_0"
-        args.wandb_project = "tabpfn-pt"
-        args.wandb_entity = "nyu-dice-lab"
-        args.subset_features_method = "pca"
-        args.pad_features = True
-        args.do_preprocess = True
-        args.zs_eval_ensemble = 0
-        args.min_batches_per_epoch = 1
-        args.keep_topk_ensemble = 0
-        args.topk_key = "Val_Accuracy"
-        args.max_time = 36000
-        args.preprocess_type = "none"
-        args.optuna_objective = "Val_Accuracy"
-        args.verbose = True
-        args.shuffle_every_epoch = False
-        args.max_num_classes = 10
-        args.real_data_qty = 0
-        args.summerize_after_prep = False
-        args.kl_loss = False
-        args.private_model = False
-        args.private_data = False
-        args.edg = ["50", "1e-4", "1.2"]
-
-        return args
-
-    def fit(self, x, y, cat_idx=[]):
-        assert isinstance(x, np.ndarray), "x must be a numpy array"
-        assert isinstance(y, np.ndarray), "x must be a numpy array"
-        assert len(x.shape) == 2, "x must be a 2D array (samples, features)"
-        assert len(y.shape) == 1, "y must be a 1D array"
-
-        if self.only_inference:
-            model, _ = load_model_only_inference(
-                self.base_path,
-                self.model_file,
-                self.device,
-                prefix_size=10,
-                n_classes=2,
-            )
-            self.model = model[2]
-            _, _, _, _, self.data_for_fitting, self.perm_map = get_model(
-                self.config,
-                self.config["device"],
-                should_train=True,
-                state_dict=self.config["state_dict"],
-                is_wrapper=True,
-                x_wrapper=x,
-                y_wrapper=y,
-                cat_idx=cat_idx,
-                get_dataset=True,
-            )
-        else:
-            self.model, self.data_for_fitting, _ = train_function(
-                self.config.copy(),
-                0,
-                self.model_string,
-                is_wrapper=True,
-                x_wrapper=x,
-                y_wrapper=y,
-                cat_idx=cat_idx,
-            )
-        self.eval_pos = self.data_for_fitting[0].shape[0]
-        self.num_classes = len(np.unique(y))
-
-    def predict(self, x, cat_idx=[]):
-        assert isinstance(x, np.ndarray), "x must be a numpy array"
-
-        self.config["epochs"] = 0
-        _, _, test_loader = train_function(
-            self.config,
-            0,
-            self.model_string,
-            is_wrapper=True,
-            x_wrapper=x,
-            y_wrapper=np.random.randint(self.num_classes, size=x.shape[0]),
-            cat_idx=cat_idx,
-        )
-        out = real_data_eval_out(
-            r_model=self.model,
-            cl=self.eval_pos,
-            train_data=self.data_for_fitting,
-            val_dl=test_loader,
-        )
-        return out[1]
-
-    def predict(
-        self,
-        X,
-        return_winning_probability=False,
-        normalize_with_test=False,
-        return_early=False,
-    ):
-        p = self.predict_proba(
-            X, normalize_with_test=normalize_with_test, return_early=return_early
-        )
-        y = np.argmax(p, axis=-1)
-        y = self.classes_.take(np.asarray(y, dtype=np.intp))
-        if return_winning_probability:
-            return y, p.max(axis=-1)
-        return y
-
-    def predict_proba(self, x, cat_idx=[]):
-        assert isinstance(x, np.ndarray), "x must be a numpy array"
-
-        self.config["epochs"] = 0
-        _, _, test_loader = train_function(
-            self.config,
-            0,
-            self.model_string,
-            is_wrapper=True,
-            x_wrapper=x,
-            y_wrapper=np.random.randint(self.num_classes, size=x.shape[0]),
-            cat_idx=cat_idx,
-        )
-        out = real_data_eval_out(
-            r_model=self.model,
-            val_dl=test_loader,
-            cl=self.eval_pos,
-            train_data=self.data_for_fitting,
-            return_probs=True,
-        )
-        print(out)
-        return out[1]
 
 
 class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
@@ -888,11 +698,24 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         epoch=10,
         batch_size=16,
         lr=0.1,
-        tuned_prompt_size = 20,
+        dropout=0.2,
+        tuned_prompt_size = 10,
+        early_stopping=2,
         prompt_tuning=True,
         no_preprocess_mode=False,
         no_grad=True,
+        boosting=False,
+        bagging=False, 
+        ensemble_size=5,
+        average_ensemble=False
+
     ):
+        self.boosting = boosting
+        self.dropout = dropout
+        self.average_ensemble = average_ensemble
+        self.ensemble_size = ensemble_size
+        self.bagging = bagging
+        self.early_stopping = early_stopping
         self.prompt_tuning = prompt_tuning
         self.tuned_prompt_size = tuned_prompt_size
         self.batch_size_inference = 1
@@ -925,7 +748,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
 
         self.args = self.get_default_config(self.args)
 
-        self.config, self.model_string = reload_config(longer=1, args=self.args)
+        self.config, self.model_string = reload_config(config_type="real", longer=1, args=self.args)
         self.config["wandb_log"] = False
 
         import ConfigSpace
@@ -939,20 +762,21 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         args.save_path = self.log_path
         args.prior_type = "real"
         args.data_path = ""
+        args.dropout = self.dropout
         args.prompt_tuning = True
-        args.tuned_prompt_size = 20
+        args.tuned_prompt_size = self.tuned_prompt_size
         args.tuned_prompt_label_balance = "equal"
         args.lr = self.lr
         args.batch_size = self.batch_size
         args.bptt = 1152
         args.uniform_bptt = False
         args.seed = 42
-        args.early_stopping = 5
+        args.early_stopping = self.early_stopping
         args.epochs = self.epoch
         args.num_eval_fitting_samples = 1000
         args.split = 0
-        args.boosting = False
-        args.bagging = False
+        args.boosting = self.boosting
+        args.bagging = self.bagging
         args.bptt_search = False
         args.workers = 4
         args.val_subset_size = 1000000
@@ -960,10 +784,10 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         args.subsampling = 0
         args.rand_init_ensemble = False
         args.ensemble_lr = 0.5
-        args.ensemble_size = 5
+        args.ensemble_size = self.ensemble_size
         args.reseed_data = False
         args.aggregate_k_gradients = 1
-        args.average_ensemble = False
+        args.average_ensemble = self.average_ensemble
         args.permute_feature_position_in_ensemble = False
         args.concat_method = ""
         args.save_every_k_epochs = 2

@@ -1,5 +1,4 @@
 from tunetables_light.scripts.transformer_prediction_interface import (
-    TabPFNClassifier,
-    TuneTablesClassifier,
+    TabPFNClassifier
 )
 from . import *

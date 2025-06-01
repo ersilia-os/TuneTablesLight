@@ -51,7 +51,7 @@ class TestTuneTablesClassifierFit(unittest.TestCase):
         print("X_train:", X_train.shape, "y_train:", y_train.shape)
         print("X_test: ", X_test.shape, "y_test: ", y_test.shape)
 
-        model = TuneTablesClassifierLight(epoch=3, device="cuda")
+        model = TuneTablesClassifierLight(epoch=3, device="cuda", dropout=0.2)
         model.fit(X_train, y_train)
         model.save_model("my_model")
         y_hat = model.predict_proba(X_test)

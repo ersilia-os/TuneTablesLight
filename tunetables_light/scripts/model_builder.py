@@ -120,9 +120,8 @@ def load_model_only_inference(path, filename, device, prefix_size, n_classes):
         recompute_attn=config_sample["recompute_attn"],
         y_encoder=y_encoder_generator(1, config_sample["emsize"]),
         dropout=config_sample["dropout"],
-        # pos_encoder=pos_enc,
         efficient_eval_masking=config_sample["efficient_eval_masking"],
-        prefix_size=10,
+        prefix_size=prefix_size,
         n_classes=n_classes,
     )
     model.criterion = loss
@@ -481,6 +480,7 @@ def get_model(
         loss = Losses.ce(config["num_classes"])
 
     epkd = {
+        "dropout": config.get("dropout", 0.0),
         "prior_type": config["prior_type"],
         "num_features": n_features,
         "split": config["split"],
