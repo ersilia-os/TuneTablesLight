@@ -51,7 +51,7 @@ class TestTuneTablesClassifierFit(unittest.TestCase):
         print("X_train:", X_train.shape, "y_train:", y_train.shape)
         print("X_test: ", X_test.shape, "y_test: ", y_test.shape)
 
-        model = TuneTablesClassifierLight(epoch=3, device="cpu", dropout=0.2, bagging=True, subset_features_method="mutual_information")
+        model = TuneTablesClassifierLight(epoch=4, device="cpu", dropout=0.2, bagging=True, subset_features_method="mutual_information")
         model.fit(X_train, y_train)
         model.save_model("my_model_2")
         y_hat = model.predict_proba(X_test)
@@ -71,7 +71,7 @@ class TestTuneTablesClassifierFit(unittest.TestCase):
 class TestTuneTablesClassifierLoadWithClassImbalance(unittest.TestCase):
     def test_main(self):
         _, X_test, y_train, y_test = make_breast_cancer_dataset()
-        model = TuneTablesClassifierLight.load_model("my_model")
+        model = TuneTablesClassifierLight.load_model("my_model_2")
         y_hat = model.predict_proba(X_test)
         print(y_hat)
 

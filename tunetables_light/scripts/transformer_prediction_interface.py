@@ -739,7 +739,8 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         average_ensemble=False,
         subsampling_size=0,
         subset_features_method="pca",
-        batch_per_tunetabless_run=1152
+        batch_per_tunetabless_run=1152,
+        tuned_prompt_label_balance="equal"
 
     ):
         self.batch_per_tunetabless_run = batch_per_tunetabless_run
