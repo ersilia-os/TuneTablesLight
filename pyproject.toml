@@ -23,8 +23,7 @@ dependencies=[
         'configspace==0.4.21',
         'pandas>=1.3.3,<=2.2.0',
         "umap-learn",
-        "faiss-cpu",
-        "faiss-gpu"
+        "faiss-cpu"
 ]
 
 [[tool.pdm.source]]
