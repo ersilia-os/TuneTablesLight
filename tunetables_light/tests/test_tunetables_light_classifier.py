@@ -51,9 +51,9 @@ class TestTuneTablesClassifierFit(unittest.TestCase):
         print("X_train:", X_train.shape, "y_train:", y_train.shape)
         print("X_test: ", X_test.shape, "y_test: ", y_test.shape)
 
-        model = TuneTablesClassifierLight(epoch=3, device="cuda", dropout=0.2, bagging=True)
+        model = TuneTablesClassifierLight(epoch=3, device="cpu", dropout=0.2, bagging=True, subset_features_method="mutual_information")
         model.fit(X_train, y_train)
-        model.save_model("my_model")
+        model.save_model("my_model_2")
         y_hat = model.predict_proba(X_test)
         n_classes = 2
         y_pred = np.argmax(y_hat, axis=1)

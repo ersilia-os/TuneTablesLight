@@ -1922,14 +1922,13 @@ def train(
                         current_outs[m] += output_dict[j][m]
                     current_outs[m] /= i + 1
                 else:
-                    current_outs[m] = output_dict[0][m]
+                    current_outs[m] = torch.from_numpy(output_dict[0][m]).to(device=device, dtype=torch.float32)
                     for j in range(1, i + 1):
                         if j not in models_to_include:
                             continue
-                        boost_res = torch.mul(
-                            boosting_lr, torch.from_numpy(output_dict[j][m])
-                        )
-                        current_outs[m] += boost_res
+
+                        boost_res = boosting_lr * torch.from_numpy(output_dict[j][m]).to(device=device, dtype=torch.float32)
+                        current_outs[m] = current_outs[m] + boost_res  
                 _, current_preds[m] = torch.max(current_outs[m].cpu().data, 1)
                 correct = (
                     (current_preds[m] == torch.from_numpy(test_targets[m])).sum().item()

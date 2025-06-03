@@ -735,10 +735,16 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         no_grad=True,
         boosting=False,
         bagging=False, 
-        ensemble_size=5,
-        average_ensemble=False
+        ensemble_size=3,
+        average_ensemble=False,
+        subsampling_size=0,
+        subset_features_method="pca",
+        batch_per_tunetabless_run=1152
 
     ):
+        self.batch_per_tunetabless_run = batch_per_tunetabless_run
+        self.subset_features_method = subset_features_method
+        self.subsampling_size = subsampling_size
         self.boosting = boosting
         self.dropout = dropout
         self.average_ensemble = average_ensemble
@@ -789,15 +795,15 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
     def get_default_config(self, args):
         args.resume = self.pretrained_model_file
         args.save_path = self.log_path
-        args.prior_type = "real"
+        args.prior_type = "real" # option: causal
         args.data_path = ""
         args.dropout = self.dropout
-        args.prompt_tuning = True
+        args.prompt_tuning = self.prompt_tuning
         args.tuned_prompt_size = self.tuned_prompt_size
         args.tuned_prompt_label_balance = "equal"
         args.lr = self.lr
         args.batch_size = self.batch_size
-        args.bptt = 1152
+        args.bptt = self.batch_per_tunetabless_run
         args.uniform_bptt = False
         args.seed = 42
         args.early_stopping = self.early_stopping
@@ -810,7 +816,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         args.workers = 4
         args.val_subset_size = 1000000
         args.subset_features = 100
-        args.subsampling = 0
+        args.subsampling =  self.subsampling_size
         args.rand_init_ensemble = False
         args.ensemble_lr = 0.5
         args.ensemble_size = self.ensemble_size
@@ -826,7 +832,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         args.wandb_group = "openml__colic__27_pt10_rdq_0_split_0"
         args.wandb_project = "tabpfn-pt"
         args.wandb_entity = "nyu-dice-lab"
-        args.subset_features_method = "pca"
+        args.subset_features_method = self.subset_features_method
         args.pad_features = True
         args.do_preprocess = True
         args.zs_eval_ensemble = 0
@@ -1002,7 +1008,6 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         obj.model_string = metadata["other"]["model_string"]
         obj.num_classes = metadata["other"]["num_classes"]
         obj.eval_pos = metadata["other"]["eval_pos"]
-        obj.device = metadata["other"]["device"]
         data = joblib.load(os.path.join(model_dir, "training_data.joblib"))
         obj._x_train = data["x_train"]
         obj._y_train = data["y_train"]
