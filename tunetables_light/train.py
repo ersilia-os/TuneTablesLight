@@ -210,23 +210,19 @@ def train(
     y_wrapper=None,
     **model_extra_args,
 ):
-    # ulimit error fix
     torch.multiprocessing.set_sharing_strategy("file_system")
-    # fork warning fix
     torch.multiprocessing.set_start_method("spawn", force=True)
-    # set gpu device
     device = gpu_device if torch.cuda.is_available() else "cpu:0"
+    print(f"Training will be on {device} device")
     using_dist, rank, device = init_dist(device)
     start_time = time.time()
 
-    # set verbose to True
     if not verbose:
         verbose = True
         print(
             "Currently, verbose must be set to True (pass --verbose); this will change in a future release"
         )
 
-    # verify that the save path exists
     if not os.path.exists(extra_prior_kwargs_dict.get("save_path")):
         try:
             os.makedirs(extra_prior_kwargs_dict.get("save_path"))
@@ -287,21 +283,19 @@ def train(
             test_index = dataset.split_indeces[1]
         else:
             for i, split_dictionary in enumerate(dataset.split_indeces):
-                # TODO: make stopping index a hyperparameter
-                if i != extra_prior_kwargs_dict.get("split"):  # config['split']:
+                if i != extra_prior_kwargs_dict.get("split"):  
                     continue
                 train_index = split_dictionary["train"]
                 val_index = split_dictionary["val"]
                 test_index = split_dictionary["test"]
 
         if True:
-            # run pre-processing & split data (list of numpy arrays of length num_ensembles)
             processed_data = process_data(
                 dataset,
                 train_index,
                 val_index,
                 test_index,
-                verbose=extra_prior_kwargs_dict.get("verbose"),  # config['verbose'],
+                verbose=extra_prior_kwargs_dict.get("verbose"),  
                 scaler="None",
                 one_hot_encode=extra_prior_kwargs_dict.get("ohe", True),
                 impute=extra_prior_kwargs_dict.get("do_impute", True),
@@ -544,14 +538,14 @@ def train(
                 print("Size of data for fitting: ", len(data_for_fitting[0]))
 
         if do_zs or do_kl_loss:
-            from scripts.transformer_prediction_interface import TabPFNClassifier
+            from scripts.transformer_prediction_interface import TuneTablesZeroShotClassifier
 
             if extra_prior_kwargs_dict.get("zs_eval_ensemble", 0) > 0:
                 ens_size = extra_prior_kwargs_dict.get("zs_eval_ensemble", 0)
             else:
                 ens_size = 32
-            eval_model = TabPFNClassifier(
-                device="cuda",
+            eval_model = TuneTablesZeroShotClassifier(
+                device=device,
                 N_ensemble_configurations=ens_size,
                 base_path=".",
                 seed=extra_prior_kwargs_dict.get("rand_seed", 0),
@@ -730,7 +724,6 @@ def train(
         if do_kl_loss:
             load_weights_from_this_state_dict.pop("criterion.weight")
         if num_classes > 10:
-            # initialize a new decoder head
             decoder_mismatch = True
             load_weights_from_this_state_dict["decoder.2.weight"] = model.state_dict()[
                 "decoder.2.weight"
@@ -1064,14 +1057,12 @@ def train(
                     loss = scaler.scale(loss)
                 if boosting and boost_this_epoch:
                     cur_grads = []
-                    # Backward pass for each prediction/target pair
                     if prior_grad_dict is None:
                         prior_grad_iter = None
                     else:
                         prior_grad_iter = prior_grad_dict[batch].to(output.device)
                     output_grad = autograd.grad(loss, output)[0]
                     gradient_dict[batch] = output_grad.detach().cpu().clone()
-                    # cur_grads.append(output_grad.detach().cpu().clone())
 
                     if prior_grad_iter is not None:
                         grad_shape = output_grad.shape
@@ -1088,7 +1079,6 @@ def train(
                         output_grad = flat_grad_new.reshape(grad_shape)
 
                     output.backward(output_grad)
-                    # gradient_dict[batch] = torch.cat(cur_grads, dim=0)
                 elif bptt_search:
                     pass
                 else:
@@ -1386,7 +1376,6 @@ def train(
             nc_ll = 0
             nc_test_ll = 0
         if verbose:
-            # print("In update ensemble acc, Targets: ", labels_np[:20])
             print(
                 "Ensemble accuracy: ", ens_acc, "Ensemble accuracy (NC): ", ens_acc_nc
             )
@@ -1415,7 +1404,6 @@ def train(
         return new_res
 
     def train_test_loop(t_model, t_optim, t_sched, eval_model, dl, val_dl, test_dl):
-        # Select a fixed training data prior of size bptt
         return_outputs = None
         return_targets = None
         res_dict = None
@@ -1436,7 +1424,6 @@ def train(
             boost_this_epoch = True if epoch == 1 else False
             epoch_start_time = time.time()
             master_epoch_count.append(1)
-            # Confirm that the correct params are frozen and unfrozen
             if do_prompt_tuning:
                 t_model.freeze_parameters_except_named(params_to_optimize)
                 for n, p in t_model.named_parameters():
@@ -1449,7 +1436,7 @@ def train(
                             n
                         )
                     )
-            t_model.train()  # Turn on the train mode
+            t_model.train()  
             total_loss, _, time_to_get_batch, forward_time, step_time, _, _ = (
                 train_epoch(
                     t_model,
@@ -1483,7 +1470,6 @@ def train(
                 return_outputs = [val_outputs]
                 return_targets = [val_targets]
                 if do_prompt_tuning:
-                    # TODO: will this work with context length 0? Should this be a hyperparameter?
                     if do_concat != "":
                         print(
                             f"We are doing the prompting and concatenation: {do_concat}"
@@ -1614,7 +1600,6 @@ def train(
                 if epoch_callback is not None and rank == 0:
                     epoch_callback(model, epoch / epochs, res_dict)
                 if val_score is not None:
-                    # save the log to a json file
                     res_dict = dict(
                         res_dict,
                         **{
@@ -1738,17 +1723,11 @@ def train(
         split_indices = []
         for i in range(boosting_n_iters):
             np.random.seed(extra_prior_kwargs_dict.get("rand_seed") + i)
-            # NOTE: split sizes as absolute numbers
             split_indices.append(
                 np.random.choice(
                     np.arange(len(dl_backup.dataset)), size=split_size, replace=True
                 )
             )
-            # NOTE: split sizes as percentages of the dataset
-            # split_size = 0.5
-            # split_indices.append(np.random.choice(np.arange(len(dl_backup.dataset)), size=int(split_size * len(dl_backup.dataset)), replace=False))
-        # dl_backup = dl
-        # split_indices = np.array_split(np.arange(len(dl_backup.dataset)), boosting_n_iters)
     is_ensemble = boosting or bagging or rand_init_ensemble
     prefix_weights_l = []
     cur_boost_iter = 0
@@ -1759,11 +1738,6 @@ def train(
     ensembling_acc = dict()
     res_dict_ensemble = dict()
     best_results = dict()
-
-    # ***
-    # train/ENSEMBLING 1st loop
-    # ***
-
     try:
         ens_patience = 0
         topk_key = extra_prior_kwargs_dict.get("topk_key", "Val_Accuracy")
@@ -1914,7 +1888,6 @@ def train(
                 )
             prior_grad_dict = gradient_dict
 
-            # No need to save ensembled results if we are concatenating; regular results are accurate
             if do_concat != "":
                 continue
 
@@ -1929,7 +1902,6 @@ def train(
                             topk_ens_val, i + 1, topk_key
                         )
                     )
-                # sort by val score
                 sorted_res = sorted(
                     res_dict_ensemble.items(),
                     key=lambda x: x[1][topk_key],
@@ -1938,7 +1910,6 @@ def train(
                 models_to_include = [x[0] for x in sorted_res][:topk_ens_val]
             else:
                 models_to_include = list(range(i + 1))
-            # Evaluate average model on all available benchmarks
             for m in range(len(output_dict[0])):
                 total = len(test_targets[m])
                 if extra_prior_kwargs_dict.get("average_ensemble"):
@@ -1950,7 +1921,6 @@ def train(
                             continue
                         current_outs[m] += output_dict[j][m]
                     current_outs[m] /= i + 1
-                # Evaluate additive model
                 else:
                     current_outs[m] = output_dict[0][m]
                     for j in range(1, i + 1):
@@ -1965,8 +1935,6 @@ def train(
                     (current_preds[m] == torch.from_numpy(test_targets[m])).sum().item()
                 )
                 boosting_accs[m] = np.round(correct / total, 3)
-            # TODO: this should not be hard-coded
-            # OUTPUT_DICT[0] contains val_outputs, test_outputs, val_outputs_nc, test_outputs_nc
             probs_np = output_dict[0][0]
             labels_np = test_targets[0]
             probs_np_test = output_dict[0][1]
@@ -1997,7 +1965,6 @@ def train(
                     do_concat,
                     prefix_weights_l,
                 )
-            # Save ensembled accuracy
             with open(
                 os.path.join(
                     extra_prior_kwargs_dict.get("save_path"), "ensembling_acc.json"
@@ -2011,35 +1978,28 @@ def train(
                 master_epoch_count.append(1)
                 wandb.log(ensembling_acc[i], step=len(master_epoch_count), commit=True)
 
-            # Early stopping
             if ens_patience > extra_prior_kwargs_dict.get("early_stopping_patience", 2):
                 print("Early stopping after {} ensembles".format(i))
                 break
 
-    # break down training and return
-    if rank == 0:  # trivially true for non-parallel training
+    if rank == 0:  
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model = model.module
             dl = None
-        # todo: model_builder.py expects two outputs: model, results_dict
         return model, best_results, data_for_fitting, None
 
     return model, best_results, data_for_fitting, None
 
 
 def _parse_args(config_parser, parser):
-    # Do we have a config file to parse?
     args_config, remaining = config_parser.parse_known_args()
     if args_config.config:
         with open(args_config.config, "r") as f:
             cfg = yaml.safe_load(f)
             parser.set_defaults(**cfg)
 
-    # The main arg parser parses the rest of the args, the usual
-    # defaults will have been overridden if config file specified.
     args = parser.parse_args(remaining)
 
-    # Cache the args as a text string to save them in the output dir later
     args_text = yaml.safe_dump(args.__dict__, default_flow_style=False)
     return args, args_text
 
@@ -2052,7 +2012,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("prior")
     parser.add_argument("--loss_function", default="gaussnll")
-    # Optional Arg's for `--loss_function barnll`
     parser.add_argument(
         "--min_y",
         type=float,
@@ -2069,7 +2028,6 @@ if __name__ == "__main__":
         type=int,
         help="Specify depending on the prior (can be None).",
     )
-    # parser.add_argument('--num_features', default=None, type=int, help='Specify depending on the prior.')
     parser.add_argument(
         "--extra_prior_kwargs_dict",
         default={},
