@@ -738,11 +738,13 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         ensemble_size=3,
         average_ensemble=False,
         subsampling_size=0,
+        seed=0,
         subset_features_method="pca",
         batch_per_tunetabless_run=1152,
         tuned_prompt_label_balance="equal"
 
     ):
+        self.seed = seed
         self.batch_per_tunetabless_run = batch_per_tunetabless_run
         self.subset_features_method = subset_features_method
         self.subsampling_size = subsampling_size
@@ -806,7 +808,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         args.batch_size = self.batch_size
         args.bptt = self.batch_per_tunetabless_run
         args.uniform_bptt = False
-        args.seed = 42
+        args.seed = self.seed
         args.early_stopping = self.early_stopping
         args.epochs = self.epoch
         args.num_eval_fitting_samples = 1000
