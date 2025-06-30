@@ -326,7 +326,7 @@ def parse_args():
     parser.add_argument(
         "--resume",
         type=str,
-        default="../models/prior_diff_real_checkpoint_n_0_epoch_42.cpkt",
+        default="models/prior_diff_real_checkpoint_n_0_epoch_42.cpkt",
         help="Path to model checkpoint to resume from.",
     )
     parser.add_argument(

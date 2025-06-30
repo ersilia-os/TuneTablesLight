@@ -538,7 +538,7 @@ def train(
                 print("Size of data for fitting: ", len(data_for_fitting[0]))
 
         if do_zs or do_kl_loss:
-            from scripts.transformer_prediction_interface import TuneTablesZeroShotClassifier
+            from tunetables_light.scripts.transformer_prediction_interface import TuneTablesZeroShotClassifier
 
             if extra_prior_kwargs_dict.get("zs_eval_ensemble", 0) > 0:
                 ens_size = extra_prior_kwargs_dict.get("zs_eval_ensemble", 0)

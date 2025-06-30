@@ -713,9 +713,9 @@ def transformer_predict(
 
 def get_params_from_config(c):
     return {
-        "max_features": c["num_features"],
+        "max_features": c.get("num_features", 100),
         "rescale_features": c.get("normalize_by_used_features", True),
-        "normalize_to_ranking": c["normalize_to_ranking"],
+        "normalize_to_ranking": c.get("normalize_to_ranking", False),
         "normalize_with_sqrt": c.get("normalize_with_sqrt", False),
     }
 
@@ -765,6 +765,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         self.base_path = pathlib.Path(__file__).parent.parent.resolve()
         self.model_base_path = pathlib.Path(__file__).parent.parent.resolve()
         self.log_path = os.path.join(self.base_path, "logs")
+        self.is_fitted = False
         self.pretrained_model_file = os.path.join(
             self.model_base_path,
             "models",
@@ -858,6 +859,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         return args
 
     def _fit_only_prefitted(self, X, y):
+        print(self.base_path, self.model_file)
         model, c = load_model_only_inference(
             self.base_path, self.model_file, self.device, prefix_size=10, n_classes=2
         )
@@ -889,13 +891,20 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
 
         self._x_train = x
         self._y_train = y
+        self.is_fitted = True
+        self.c = self.config
 
 
     def predict_proba(
         self, X, normalize_with_test=False, return_logits=False, return_early=False
     ):
+        if self.is_fitted:
+            print("Predicting fitted model!")
+        else:
+            print("Predicting from a saved checkpoint model!")
+            self.model, self.c = self._fit_only_prefitted(self._x_train, self._y_train)
+
         self.no_grad = True
-        self.model, self.c = self._fit_only_prefitted(self._x_train, self._y_train)
 
         if self.no_grad:
             X = check_array(X, force_all_finite=False)
@@ -972,6 +981,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
             npy_files = glob.glob(os.path.join(src_dir, "*.npy"))
             for npy_file in npy_files:
                 shutil.copy(npy_file, dst_dir)
+            shutil.rmtree(src_dir)
 
         args = self.args
         config = self.config
