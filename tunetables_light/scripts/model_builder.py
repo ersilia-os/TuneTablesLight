@@ -518,7 +518,6 @@ def get_model(
         "topk_key": config.get("topk_key", "Val_Accuracy"),
         "do_preprocess": config.get("do_preprocess", False),
         "preprocess_type": config.get("preprocess_type", "none"),
-        "wandb_log": config.get("wandb_log", False),
         "shuffle_every_epoch": config.get("shuffle_every_epoch", False),
         "real_data_qty": config.get("real_data_qty", False),
         "max_time": config.get("max_time", 0),

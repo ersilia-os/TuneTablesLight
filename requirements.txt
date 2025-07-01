@@ -10,7 +10,6 @@ catboost
 hyperopt==0.2.5
 configspace==0.4.21
 uncertainty_metrics
-wandb
 
 # Optional (for baselines)
 # auto-sklearn==0.14.5

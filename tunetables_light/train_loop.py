@@ -1,13 +1,12 @@
 import json
 import os
-import wandb
 import ConfigSpace
 
 from datetime import datetime
 from tunetables_light.scripts.model_builder import get_model, save_model
 from tunetables_light.scripts.model_configs import *
 from tunetables_light.notebook_utils import *
-from tunetables_light.utils import make_serializable, wandb_init
+from tunetables_light.utils import make_serializable
 
 
 def train_function(
@@ -302,14 +301,6 @@ def reload_config(config_type="causal", task_type="multiclass", longer=0, args=N
     # loss fn
     config["kl_loss"] = args.kl_loss
 
-    # wandb
-    # todo: for now, most are hard-coded
-    config["wandb_log"] = args.wandb_log
-    # config_sample['wandb_name'] = args.wandb_name
-    config["wandb_group"] = args.wandb_group
-    config["wandb_project"] = args.wandb_project
-    config["wandb_entity"] = args.wandb_entity
-    config["wandb_log_test_interval"] = args.validation_period
 
     config = set_compatibility_params(config, args)
 
@@ -452,24 +443,6 @@ def parse_args():
         help="How many samples to use for fast validation.",
     )
     parser.add_argument(
-        "--wandb_name", type=str, default="tt-airlines", help="Name for wandb logging."
-    )
-    parser.add_argument(
-        "--wandb_log", action="store_true", help="Whether to log to wandb."
-    )
-    parser.add_argument(
-        "--wandb_group", type=str, default="temp", help="Group for wandb logging."
-    )
-    parser.add_argument(
-        "--wandb_project", type=str, default="tt-dp", help="Project for wandb logging."
-    )
-    parser.add_argument(
-        "--wandb_entity",
-        type=str,
-        default="nyu-dice-lab",
-        help="Entity for wandb logging.",
-    )
-    parser.add_argument(
         "--subset_features_method",
         type=str,
         default="mutual_information",
@@ -602,10 +575,6 @@ def train_loop():
     ) as f:
         json.dump(simple_config, f, indent=4)
 
-    print("Training model ...")
-
-    if config["wandb_log"]:
-        wandb_init(config, model_string)
 
     # clean out optuna params
     for k, v in config.items():
@@ -614,8 +583,6 @@ def train_loop():
 
     results_dict = train_function(config, 0, model_string, is_wrapper=False)
 
-    if config["wandb_log"]:
-        wandb.finish()
     print("run complete")
     print("^RESULTS\n" + json.dumps(results_dict))
     return results_dict

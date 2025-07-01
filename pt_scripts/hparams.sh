@@ -6,23 +6,23 @@ EPOCHS=31
 # batch size, tuned_prompt_size
 
 python train_loop.py --data_path $DATA_PATH --resume $RESUME --epochs $EPOCHS --prompt_tuning \
---tuned_prompt_size 1000 --lr 0.01 --aggregate_k_gradients 1 --batch_size 4 --seed 100 --wandb_name "higgs_lr01"
+--tuned_prompt_size 1000 --lr 0.01 --aggregate_k_gradients 1 --batch_size 4 --seed 100
 
 python train_loop.py --data_path $DATA_PATH --resume $RESUME --epochs $EPOCHS --prompt_tuning \
---tuned_prompt_size 1000 --lr 0.2 --aggregate_k_gradients 1 --batch_size 4 --seed 100 --wandb_name "higgs_lr2"
+--tuned_prompt_size 1000 --lr 0.2 --aggregate_k_gradients 1 --batch_size 4 --seed 100
 
 python train_loop.py --data_path $DATA_PATH --resume $RESUME --epochs $EPOCHS --prompt_tuning \
---tuned_prompt_size 1000 --lr 0.1 --aggregate_k_gradients 2 --batch_size 4 --seed 100 --wandb_name "higgs_agg2"
+--tuned_prompt_size 1000 --lr 0.1 --aggregate_k_gradients 2 --batch_size 4 --seed 100 
 
 python train_loop.py --data_path $DATA_PATH --resume $RESUME --epochs $EPOCHS --prompt_tuning \
---tuned_prompt_size 1000 --lr 0.1 --aggregate_k_gradients 1 --batch_size 8 --seed 100 --wandb_name "higgs_batch8"
+--tuned_prompt_size 1000 --lr 0.1 --aggregate_k_gradients 1 --batch_size 8 --seed 100 
 
 python train_loop.py --data_path $DATA_PATH --resume $RESUME --epochs $EPOCHS --prompt_tuning \
---tuned_prompt_size 1000 --lr 0.1 --aggregate_k_gradients 1 --batch_size 2 --seed 100 --wandb_name "higgs_batch2"
+--tuned_prompt_size 1000 --lr 0.1 --aggregate_k_gradients 1 --batch_size 2 --seed 100
 
 python train_loop.py --data_path $DATA_PATH --resume $RESUME --epochs $EPOCHS --prompt_tuning \
---tuned_prompt_size 1000 --lr 0.1 --aggregate_k_gradients 1 --batch_size 4 --bptt 512 --seed 100 --wandb_name "higgs_bptt512"
+--tuned_prompt_size 1000 --lr 0.1 --aggregate_k_gradients 1 --batch_size 4 --bptt 512 
 
 python train_loop.py --data_path $DATA_PATH --resume $RESUME --epochs $EPOCHS --prompt_tuning \
---tuned_prompt_size 1000 --lr 0.1 --aggregate_k_gradients 1 --batch_size 4 --bptt 2048 --seed 100 --wandb_name "higgs_bptt2048"
+--tuned_prompt_size 1000 --lr 0.1 --aggregate_k_gradients 1 --batch_size 4 --bptt 2048 
 

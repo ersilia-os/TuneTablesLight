@@ -26,9 +26,7 @@ from tunetables_light.utils import (
 from tunetables_light.scripts.model_builder import (
     load_model,
     load_model_only_inference,
-    get_model,
 )
-from tunetables_light.train import real_data_eval_out
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils import column_or_1d
@@ -788,7 +786,6 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         self.args = self.get_default_config(self.args)
 
         self.config, self.model_string = reload_config(longer=1, args=self.args)
-        self.config["wandb_log"] = False
 
         import ConfigSpace
 
@@ -831,11 +828,6 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         args.concat_method = ""
         args.save_every_k_epochs = 2
         args.validation_period = 3
-        args.wandb_name = "tabpfn_pt_airlines"
-        args.wandb_log = False
-        args.wandb_group = "openml__colic__27_pt10_rdq_0_split_0"
-        args.wandb_project = "tabpfn-pt"
-        args.wandb_entity = "nyu-dice-lab"
         args.subset_features_method = self.subset_features_method
         args.pad_features = True
         args.do_preprocess = True

@@ -663,10 +663,6 @@ def train(
                 "w",
             ) as f:
                 json.dump(res_dict, f)
-            if extra_prior_kwargs_dict.get("wandb_log", False):
-                import wandb
-
-                wandb.log(res_dict, step=1, commit=True)
     else:
         raise Exception("Excepted a real dataset")
 
@@ -1606,10 +1602,6 @@ def train(
                             "epoch": epoch,
                         },
                     )
-                    if extra_prior_kwargs_dict.get("wandb_log", False):
-                        import wandb
-
-                        wandb.log(res_dict, step=len(master_epoch_count), commit=True)
                     if is_best:
                         best_res_dict = res_dict
                         best_outputs = return_outputs
@@ -1791,12 +1783,6 @@ def train(
                     "w",
                 ) as f:
                     json.dump(ensembling_acc, f, indent=4)
-                if extra_prior_kwargs_dict.get("wandb_log", False):
-                    import wandb
-
-                    wandb.log(
-                        ensembling_acc[i], step=len(master_epoch_count), commit=True
-                    )
         if do_prompt_tuning:
             prefix_weights_l = save_prefix_weights(
                 model,
@@ -1971,11 +1957,8 @@ def train(
                 "w",
             ) as f:
                 json.dump(ensembling_acc, f, indent=4)
-            if extra_prior_kwargs_dict.get("wandb_log", False):
-                import wandb
 
                 master_epoch_count.append(1)
-                wandb.log(ensembling_acc[i], step=len(master_epoch_count), commit=True)
 
             if ens_patience > extra_prior_kwargs_dict.get("early_stopping_patience", 2):
                 print("Early stopping after {} ensembles".format(i))

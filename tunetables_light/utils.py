@@ -11,8 +11,6 @@ from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
 import numpy as np
 
-import wandb
-
 
 def seed_all(seed=0):
     # print('Setting random, numpy, torch seeds to', seed)
@@ -467,25 +465,3 @@ def make_serializable(config_sample):
     return config_sample
 
 
-def get_wandb_api_key(api_key_file="./config/wandb_api_key.txt"):
-    try:
-        return os.environ["WANDB_API_KEY"]
-    except KeyError:
-        with open(api_key_file, "r") as f:
-            key = f.read()
-        return key.strip()
-
-
-def wandb_init(config, model_string):
-    mkey = get_wandb_api_key()
-    wandb.login(key=mkey)
-    simple_config = make_serializable(config)
-    if simple_config["state_dict"] is not None:
-        simple_config["state_dict"] = "omitted"
-    wandb.init(
-        config=simple_config,
-        name=model_string,
-        group=config["wandb_group"],
-        project=config["wandb_project"],
-        entity=config["wandb_entity"],
-    )
