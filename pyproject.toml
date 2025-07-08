@@ -6,11 +6,8 @@ build-backend = "hatchling.build"
 name = "tunetables_light"
 version = "0.3.1"
 authors = [
-{
-      {name = "Ersilia Open Source Initiative", email = "hello@ersilia.io"},
-  name="Abel Legese", email="abel@ersilia.io"
-  
-  },
+  {name = "Ersilia Open Source Initiative", email = "hello@ersilia.io"},
+  {name="Abel Legese", email="abel@ersilia.io"}
 ]
 description = "A light weight implementation of TuneTables, a tabular classifier that implements prompt tuning for frozen prior-fitted networks."
 readme = "README.md"
