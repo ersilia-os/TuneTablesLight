@@ -84,11 +84,6 @@ class TransformerModel(nn.Module):
                 )
             else:
                 self.prefix_y_embedding = torch.randint(0, n_classes, (prefix_size,))
-            print(
-                "|prefix_y_embedding has {} unique classes |".format(
-                    len(torch.unique(self.prefix_y_embedding))
-                )
-            )
         self.full_attention = full_attention
         self.efficient_eval_masking = efficient_eval_masking
 
@@ -96,40 +91,6 @@ class TransformerModel(nn.Module):
         self.nhid = nhid
 
         self.init_weights()
-        print(f"Model initialized with following parameters: {self.dropout}")
-        params = {
-            "ninp": ninp,
-            "nhead": nhead,
-            "nhid": nhid,
-            "nlayers": nlayers,
-            "dropout": self.dropout,
-            "activation": activation,
-            "recompute_attn": recompute_attn,
-            "num_global_att_tokens": num_global_att_tokens,
-            "full_attention": full_attention,
-            "all_layers_same_init": all_layers_same_init,
-            "efficient_eval_masking": efficient_eval_masking,
-            "prefix_size": prefix_size,
-            "n_classes": n_classes,
-            "encoder": encoder,
-            "y_encoder": y_encoder,
-            "pos_encoder": pos_encoder,
-            "style_encoder": style_encoder,
-            "linear": linear,
-        }
-
-        col1 = max(len(k) for k in params.keys())
-        col2 = max(len(str(v)) for v in params.values())
-
-        sep = "+-" + "-" * col1 + "-+-" + "-" * col2 + "-+"
-
-        print(sep)
-        print("| {:<{w1}} | {:<{w2}} |".format("Parameter", "Value", w1=col1, w2=col2))
-        print(sep)
-        for k, v in params.items():
-            print("| {:<{w1}} | {:<{w2}} |".format(k, str(v), w1=col1, w2=col2))
-        print(sep)
-
     def __setstate__(self, state):
         super().__setstate__(state)
         self.__dict__.setdefault("efficient_eval_masking", False)
@@ -230,14 +191,12 @@ class TransformerModel(nn.Module):
         if self.prefix_size > 0:
             single_eval_pos = single_eval_pos + self.prefix_size
             if len(x_src.shape) > len(self.prefix_embedding.weight.shape):
-                print(f"Embedding size: {self.prefix_embedding.weight.shape} |sequeezed prefix weight shape: {self.prefix_embedding.weight.unsqueeze(1).shape} | X_src shape: {x_src.shape}")
                 x_src = torch.cat([self.prefix_embedding.weight.unsqueeze(1).repeat(1, x_src.shape[1], 1), x_src], 0)
             elif len(x_src.shape) == len(self.prefix_embedding.weight.shape):
                 x_src = torch.cat([self.prefix_embedding.weight, x_src], 0)
             else:
                 x_src = torch.cat([x_src.unsqueeze(1), self.prefix_embedding.weight], 0)
             if len(y_src.shape) > len(self.prefix_y_embedding.shape):
-                print(f"Y_src shape: {y_src.shape} | embedding shape: {self.prefix_y_embedding.shape} | unsqueezed embedding shape: {self.prefix_y_embedding.unsqueeze(1).shape} ")
                 y_src = torch.cat(
                     [
                         self.prefix_y_embedding.to(

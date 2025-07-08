@@ -14,7 +14,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies=[
         'torch>=1.9.0',
-        'scikit-learn>=0.24.2,<=1.6.1',
+        'scikit-learn>=1.6.1',
         'pyyaml>=5.4.1,<=6.0.1',
         'numpy>=1.21.2,<=1.26.4',
         'requests>=2.23.0',
@@ -25,16 +25,19 @@ dependencies=[
         "faiss-cpu"
 ]
 
-[[tool.pdm.source]]
-name = "faiss"
-url = "https://pypi.faiss.ai/simple"
-verify_ssl = true
 
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+
+[[tool.pdm.source]]
+name = "faiss"
+url = "https://pypi.faiss.ai/simple"
+verify_ssl = true
+
+
 
 [tool.hatch.build]
 exclude = [
