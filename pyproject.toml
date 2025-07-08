@@ -6,11 +6,15 @@ build-backend = "hatchling.build"
 name = "tunetables_light"
 version = "0.3.1"
 authors = [
-{name="Abel Legese"},
+{
+      {name = "Ersilia Open Source Initiative", email = "hello@ersilia.io"},
+  name="Abel Legese", email="abel@ersilia.io"
+  
+  },
 ]
 description = "A light weight implementation of TuneTables, a tabular classifier that implements prompt tuning for frozen prior-fitted networks."
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 dependencies=[
         'torch>=1.9.0',
         'scikit-learn>=0.24.2,<=1.6.1',

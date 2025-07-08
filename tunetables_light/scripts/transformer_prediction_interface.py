@@ -12,16 +12,15 @@ import joblib
 import json
 import glob
 import shutil
-
-sys.path.append("../")
-
 from torch.utils.checkpoint import checkpoint
 from tunetables_light.train_loop import reload_config, train_function
+from tunetables_light.train import real_data_eval_out
 from tunetables_light.utils import (
     normalize_data,
     to_ranking_low_mem,
     remove_outliers,
     normalize_by_used_features_f,
+    install_psutil
 )
 from tunetables_light.scripts.model_builder import (
     load_model,
@@ -34,8 +33,29 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
 from sklearn.base import BaseEstimator, ClassifierMixin
 from pathlib import Path
+from torch.utils.data import DataLoader, TensorDataset, Dataset
 from tqdm.auto import tqdm
 
+try:
+    import psutil
+except:
+    install_psutil()
+    import psutil
+
+sys.path.append("../")
+
+MAX_INFERENCE_SIZE = 22_000
+MIN_INFERENCE_SIZE = 22_000 / 2
+
+class XDataset(Dataset):
+    def __init__(self, X: torch.Tensor):
+        self.X = X
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx: int) -> torch.Tensor:
+        return self.X[idx]
 
 class CustomUnpickler(pickle.Unpickler):
     def find_class(self, module, name):
@@ -79,6 +99,7 @@ def check_file(model_base_path, model_dir, file_name):
 
     return file_path
 
+
 def check_tabpfn_file(model_base_path, model_dir, file_name):
     model_path = os.path.join(model_base_path, model_dir)
     file_path = os.path.join(model_path, file_name)
@@ -102,6 +123,7 @@ def check_tabpfn_file(model_base_path, model_dir, file_name):
             f.write(r.content)
 
     return file_path
+
 
 def load_model_workflow(
     i,
@@ -404,7 +426,7 @@ def transformer_predict(
     categorical_feats=[],
     feature_shift_decoder=False,
     N_ensemble_configurations=10,
-    batch_size_inference=16,
+    batch_size_inference=4,
     differentiable_hps_as_style=False,
     average_logits=True,
     fp16_inference=False,
@@ -415,6 +437,7 @@ def transformer_predict(
     return_early=False,
     **kwargs,
 ):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     num_classes = len(torch.unique(eval_ys))
 
     def predict(eval_xs, eval_ys, used_style, softmax_temperature, return_logits):
@@ -560,6 +583,7 @@ def transformer_predict(
         if multiclass_decoder == "permutation"
         else [0]
     )
+    print(feature_shift_configurations, class_shift_configurations)
 
     ensemble_configurations = list(
         itertools.product(class_shift_configurations, feature_shift_configurations)
@@ -585,6 +609,8 @@ def transformer_predict(
             preprocess_transform_configuration,
             styles_configuration,
         ) = ensemble_configuration
+        print(f"Feature shift configuration: {feature_shift_configuration}")
+        print(f"Class shift configuration: {class_shift_configuration}")
 
         style_ = (
             style[styles_configuration : styles_configuration + 1, :]
@@ -629,11 +655,14 @@ def transformer_predict(
             )
         inputs += [eval_xs_]
         labels += [eval_ys_]
-
-    inputs = torch.cat(inputs, 1)
-    inputs = torch.split(inputs, batch_size_inference, dim=1)
-    labels = torch.cat(labels, 1)
-    labels = torch.split(labels, batch_size_inference, dim=1)
+    print(f"Input size: {len(inputs)} | eval_xs shape: {eval_xs.shape}|  eval_ys shape: {eval_ys.shape}| label shape: {len(labels)}")
+    inputs = torch.cat(inputs, dim=1)
+    print(f"Concatenated input shape: {inputs.shape}")
+    inputs = inputs.split(batch_size_inference, dim=1)
+    print(f"Number of splits: {len(inputs)}")
+    print(f"Shape of first split: {inputs[0].shape}")
+    labels = torch.cat(labels, dim=1)
+    labels = labels.split(batch_size_inference, dim=1)
     outputs = []
 
     for batch_input, batch_label in zip(inputs, labels):
@@ -656,6 +685,8 @@ def transformer_predict(
                     True,
                     use_reentrant=True,
                 )
+                print(f"cpu out:")
+
             else:
                 with torch.amp.autocast(device_type=device, enabled=fp16_inference):
                     output_batch = checkpoint(
@@ -667,6 +698,7 @@ def transformer_predict(
                         True,
                         use_reentrant=True,
                     )
+                    print(f"cuda out:")
         outputs += [output_batch]
 
     outputs = torch.cat(outputs, 1)
@@ -726,21 +758,20 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         batch_size=16,
         lr=0.1,
         dropout=0.2,
-        tuned_prompt_size = 10,
+        tuned_prompt_size=10,
         early_stopping=2,
         prompt_tuning=True,
         no_preprocess_mode=False,
         no_grad=True,
         boosting=False,
-        bagging=False, 
+        bagging=False,
         ensemble_size=3,
         average_ensemble=False,
         subsampling_size=0,
         seed=0,
         subset_features_method="pca",
         batch_per_tunetabless_run=1152,
-        tuned_prompt_label_balance="equal"
-
+        tuned_prompt_label_balance="equal",
     ):
         self.seed = seed
         self.batch_per_tunetabless_run = batch_per_tunetabless_run
@@ -754,7 +785,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         self.early_stopping = early_stopping
         self.prompt_tuning = prompt_tuning
         self.tuned_prompt_size = tuned_prompt_size
-        self.batch_size_inference = 1
+        self.batch_size_inference = 16
         self.no_preprocess_mode = no_preprocess_mode
         self.no_grad = no_grad
         self.lr = lr
@@ -796,7 +827,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
     def get_default_config(self, args):
         args.resume = self.pretrained_model_file
         args.save_path = self.log_path
-        args.prior_type = "real" # option: causal
+        args.prior_type = "real"  # option: causal
         args.data_path = ""
         args.dropout = self.dropout
         args.prompt_tuning = self.prompt_tuning
@@ -817,7 +848,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         args.workers = 4
         args.val_subset_size = 1000000
         args.subset_features = 100
-        args.subsampling =  self.subsampling_size
+        args.subsampling = self.subsampling_size
         args.rand_init_ensemble = False
         args.ensemble_lr = 0.5
         args.ensemble_size = self.ensemble_size
@@ -886,7 +917,71 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         self.is_fitted = True
         self.c = self.config
 
+    def predict_proba_2(self, X, cat_idx=[]):
+        assert isinstance(X, np.ndarray), "x must be a numpy array"
 
+        self.config["epochs"] = 0  # only process data
+        _, _, test_loader = train_function(
+            self.config,
+            0,
+            self.model_string,
+            is_wrapper=True,
+            x_wrapper=X,
+            y_wrapper=np.random.randint(self.num_classes, size=X.shape[0]),
+            cat_idx=cat_idx,
+        )
+        out = real_data_eval_out(
+            r_model=self.model,
+            cl=self.eval_pos,
+            train_data=self.data_for_fitting,
+            val_dl=test_loader,
+        )
+        return out
+    def concate_train_data(self, X_test, x_train, y_train, eval_pos, no_grad=True):
+        if no_grad:
+            X_test = check_array(X_test, force_all_finite=False)
+            X_full = np.concatenate([x_train[:eval_pos, ...], X_test], axis=0)
+            X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
+        else:
+            assert torch.is_tensor(x_train) & torch.is_tensor(x_train), (
+                "If no_grad is false, this function expects X as "
+                "a tensor to calculate a gradient"
+            )
+            X_full = (
+                torch.cat((x_train[:eval_pos, ...], X_test), dim=0)
+                .float()
+                .unsqueeze(1)
+                .to(self.device)
+            )
+
+            if int(torch.isnan(X_full).sum()):
+                print(
+                    "X contains nans and the gradient implementation is not designed to handel nans."
+                )
+        
+        y_full = np.concatenate([y_train[:eval_pos, ...], np.zeros(shape=X_test.shape[0])], axis=0)
+        y_full = torch.tensor(y_full, device=self.device).float().unsqueeze(1)
+
+        return X_full, y_full
+    
+    def _calculate_eval_pos(self, x_train, x_test):
+        eval_pos, use_batch = 0, False
+        size = x_test.shape[0]
+        mem_size = psutil.virtual_memory().total / (1024 ** 3)
+        ts = x_train.shape[0]
+        print(f"Deciding the eval pos value for a trian + test size of {size} and machine memory size of {mem_size} GB.")
+        if ts <=10_000:
+            return ts, use_batch
+        if mem_size <= 15 and size >= MAX_INFERENCE_SIZE:
+            use_batch = True
+            eval_pos = 4500
+        if mem_size >= 30 and size <= MIN_INFERENCE_SIZE:
+            eval_pos = 4500
+        if mem_size >= 30 and size >= MAX_INFERENCE_SIZE:
+            eval_pos = 4500
+            use_batch = True
+        return eval_pos, use_batch   
+    
     def predict_proba(
         self, X, normalize_with_test=False, return_logits=False, return_early=False
     ):
@@ -897,32 +992,48 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
             self.model, self.c = self._fit_only_prefitted(self._x_train, self._y_train)
 
         self.no_grad = True
+        eval_pos, use_batch = self._calculate_eval_pos(self._x_train, X)
+        print(f"Eval shape: {eval_pos} | use batch: {use_batch}")
 
-        if self.no_grad:
-            X = check_array(X, force_all_finite=False)
-            X_full = np.concatenate([self._x_train, X], axis=0)
-            X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
-        else:
-            assert torch.is_tensor(self._x_train) & torch.is_tensor(X), (
-                "If no_grad is false, this function expects X as "
-                "a tensor to calculate a gradient"
-            )
-            X_full = (
-                torch.cat((self._x_train, X), dim=0)
-                .float()
-                .unsqueeze(1)
-                .to(self.device)
-            )
+        if use_batch:
+            xdataset = XDataset(X)
 
-            if int(torch.isnan(X_full).sum()):
-                print(
-                    "X contains nans and the gradient implementation is not designed to handel nans."
+            loader = DataLoader(
+                xdataset,
+                batch_size=4500,
+                shuffle=False,
+                drop_last=False, 
+                num_workers=4
+            )
+            preds = []
+            for x_batch in loader:
+                print(f"Processing batches of data")
+                X_full, y_full = self.concate_train_data(x_batch, self._x_train, self._y_train, eval_pos)
+                prediction = transformer_predict(
+                    self.model,
+                    X_full,
+                    y_full,
+                    eval_pos,
+                    device=self.device,
+                    inference_mode=True,
+                    preprocess_transform="none" if self.no_preprocess_mode else "mix",
+                    normalize_with_test=normalize_with_test,
+                    softmax_temperature=0,
+                    return_logits=return_logits,
+                    no_grad=self.no_grad,
+                    return_early=return_early,
+                    batch_size_inference=self.batch_size_inference,
+                    **get_params_from_config(self.c),
                 )
+                prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
+                print(f"Prediction shape: {prediction_.shape}")
+                preds.append(prediction_)
+            preds = np.mean(preds, axis=1)
+            print(f"preds: {preds.shape}")
+            return preds if self.no_grad else prediction_
 
-        y_full = np.concatenate([self._y_train, np.zeros(shape=X.shape[0])], axis=0)
-        y_full = torch.tensor(y_full, device=self.device).float().unsqueeze(1)
-
-        eval_pos = self._x_train.shape[0]
+        X_full, y_full = self.concate_train_data(X, self._x_train, self._y_train, eval_pos)
+        
         prediction = transformer_predict(
             self.model,
             X_full,
@@ -935,12 +1046,11 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
             softmax_temperature=0,
             return_logits=return_logits,
             no_grad=self.no_grad,
-            batch_size_inference=self.batch_size_inference,
             return_early=return_early,
+            batch_size_inference=self.batch_size_inference,
             **get_params_from_config(self.c),
         )
         prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
-
         return prediction_.detach().cpu().numpy() if self.no_grad else prediction_
 
     def predict_(

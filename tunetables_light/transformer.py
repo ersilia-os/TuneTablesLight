@@ -221,7 +221,7 @@ class TransformerModel(nn.Module):
             "inputs (src) have to be given as (x,y) or (style,x,y) tuple"
         )
 
-        if len(src) == 2:  
+        if len(src) == 2:
             src = (None,) + src
 
         style_src, x_src, y_src = src
@@ -230,17 +230,19 @@ class TransformerModel(nn.Module):
         if self.prefix_size > 0:
             single_eval_pos = single_eval_pos + self.prefix_size
             if len(x_src.shape) > len(self.prefix_embedding.weight.shape):
-                x_src = torch.cat([self.prefix_embedding.weight.unsqueeze(1), x_src], 0)
+                print(f"Embedding size: {self.prefix_embedding.weight.shape} |sequeezed prefix weight shape: {self.prefix_embedding.weight.unsqueeze(1).shape} | X_src shape: {x_src.shape}")
+                x_src = torch.cat([self.prefix_embedding.weight.unsqueeze(1).repeat(1, x_src.shape[1], 1), x_src], 0)
             elif len(x_src.shape) == len(self.prefix_embedding.weight.shape):
                 x_src = torch.cat([self.prefix_embedding.weight, x_src], 0)
             else:
                 x_src = torch.cat([x_src.unsqueeze(1), self.prefix_embedding.weight], 0)
             if len(y_src.shape) > len(self.prefix_y_embedding.shape):
+                print(f"Y_src shape: {y_src.shape} | embedding shape: {self.prefix_y_embedding.shape} | unsqueezed embedding shape: {self.prefix_y_embedding.unsqueeze(1).shape} ")
                 y_src = torch.cat(
                     [
                         self.prefix_y_embedding.to(
                             self.prefix_embedding.weight.device
-                        ).unsqueeze(1),
+                        ).unsqueeze(1).repeat(1, y_src.shape[1]),
                         y_src,
                     ],
                     0,
@@ -310,8 +312,8 @@ class TransformerModel(nn.Module):
                         x_src.device
                     ),
                 )
-
-        train_x = x_src[:single_eval_pos] + y_src[:single_eval_pos]
+        n = min(x_src.size(0), y_src.size(0), single_eval_pos)
+        train_x = x_src[:n] + y_src[:n]
         src = torch.cat([global_src, style_src, train_x, x_src[single_eval_pos:]], 0)
 
         if self.input_ln is not None:
@@ -405,7 +407,6 @@ class TransformerModel(nn.Module):
 
 
 class TransformerEncoderDiffInit(Module):
-
     __constants__ = ["norm"]
 
     def __init__(self, encoder_layer_creator, num_layers, norm=None):

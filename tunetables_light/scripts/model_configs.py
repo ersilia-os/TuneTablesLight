@@ -15,9 +15,6 @@ def get_general_config(max_features, bptt, eval_positions=None):
     Returns the general PFN training hyperparameters.
     """
     config_general = {
-        "lr": CSH.UniformFloatHyperparameter(
-            "lr", lower=0.0001, upper=0.00015, log=True
-        ),
         "dropout": CSH.CategoricalHyperparameter("dropout", [0.0]),
         "emsize": CSH.CategoricalHyperparameter(
             "emsize", [2**i for i in range(8, 9)]

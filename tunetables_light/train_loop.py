@@ -301,7 +301,6 @@ def reload_config(config_type="causal", task_type="multiclass", longer=0, args=N
     # loss fn
     config["kl_loss"] = args.kl_loss
 
-
     config = set_compatibility_params(config, args)
 
     model_string = "_multiclass" + "_" + datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
@@ -574,7 +573,6 @@ def train_loop():
         f"{config['base_path']}/config_diff_real_{model_string}_n_{0}.json", "w"
     ) as f:
         json.dump(simple_config, f, indent=4)
-
 
     # clean out optuna params
     for k, v in config.items():

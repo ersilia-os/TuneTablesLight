@@ -5,18 +5,18 @@ import random
 import datetime
 import itertools
 import json
-
+import subprocess
 import torch
 from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
 import numpy as np
 
+def install_psutil():
+    subprocess.run(["pip", "install", "psutil"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 
 def seed_all(seed=0):
-    # print('Setting random, numpy, torch seeds to', seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    # torch.use_deterministic_algorithms(True, warn_only=True)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -26,10 +26,6 @@ def seed_all(seed=0):
 def get_cosine_schedule_with_warmup(
     optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5, last_epoch=-1
 ):
-    """Create a schedule with a learning rate that decreases following the
-    values of the cosine function between 0 and `pi * cycles` after a warmup
-    period during which it increases linearly between 0 and 1.
-    """
 
     def lr_lambda(current_step):
         if current_step < num_warmup_steps:
@@ -44,7 +40,6 @@ def get_cosine_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-# copied from huggingface
 def get_restarting_cosine_schedule_with_warmup(
     optimizer,
     num_warmup_steps,
@@ -76,28 +71,9 @@ def get_restarting_cosine_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-# copied from huggingface
 def get_linear_schedule_with_warmup(
     optimizer, num_warmup_steps, num_training_steps, last_epoch=-1
 ):
-    """
-    Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0, after
-    a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
-
-    Args:
-        optimizer (:class:`~torch.optim.Optimizer`):
-            The optimizer for which to schedule the learning rate.
-        num_warmup_steps (:obj:`int`):
-            The number of steps for the warmup phase.
-        num_training_steps (:obj:`int`):
-            The total number of training steps.
-        last_epoch (:obj:`int`, `optional`, defaults to -1):
-            The index of the last epoch when resuming training.
-
-    Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
-    """
-
     def lr_lambda(current_step: int):
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
@@ -116,21 +92,12 @@ def get_openai_lr(transformer_model):
 
 
 def get_weighted_single_eval_pos_sampler(max_len):
-    """
-    This gives a sampler that can be used for `single_eval_pos` which yields good performance for all positions p,
-    where p <= `max_len`. At most `max_len` - 1 examples are shown to the Transformer.
-    :return: Sampler that can be fed to `train()` as `single_eval_pos_gen`.
-    """
     return lambda: random.choices(
         range(max_len), [1 / (max_len - i) for i in range(max_len)]
     )[0]
 
 
 def get_uniform_single_eval_pos_sampler(max_len, min_len=0):
-    """
-    Just sample any evaluation position with the same weight
-    :return: Sampler that can be fed to `train()` as `single_eval_pos_gen`.
-    """
     return lambda: random.choices(range(min_len, max_len))[0]
 
 
@@ -152,11 +119,6 @@ class SeqBN(nn.Module):
 
 
 def set_locals_in_self(locals):
-    """
-    Call this function like `set_locals_in_self(locals())` to set all local variables as object variables.
-    Especially useful right at the beginning of `__init__`.
-    :param locals: `locals()`
-    """
     self = locals["self"]
     for var_name, val in locals.items():
         if var_name != "self":
@@ -166,7 +128,6 @@ def set_locals_in_self(locals):
 default_device = "cuda:0" if torch.cuda.is_available() else "cpu:0"
 
 
-# Copied from StackOverflow, but we do an eval on the values additionally
 class StoreDictKeyPair(argparse.Action):
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
         self._nargs = nargs
@@ -225,11 +186,6 @@ def nan_handling_missing_for_a_reason_value(set_value_to_nan=0.0):
 
 
 def torch_masked_mean(x, mask, dim=0, return_share_of_ignored_values=False):
-    """
-    Returns the mean of a torch tensor and only considers the elements, where the mask is true.
-    If return_share_of_ignored_values is true it returns a second tensor with the percentage of ignored values
-    because of the mask.
-    """
     num = torch.where(mask, torch.full_like(x, 1), torch.full_like(x, 0)).sum(dim=dim)
     value = torch.where(mask, x, torch.full_like(x, 0)).sum(dim=dim)
     if return_share_of_ignored_values:
@@ -238,10 +194,6 @@ def torch_masked_mean(x, mask, dim=0, return_share_of_ignored_values=False):
 
 
 def torch_masked_std(x, mask, dim=0):
-    """
-    Returns the std of a torch tensor and only considers the elements, where the mask is true.
-    If get_mean is true it returns as a first Tensor the mean and as a second tensor the std.
-    """
     num = torch.where(mask, torch.full_like(x, 1), torch.full_like(x, 0)).sum(dim=dim)
     value = torch.where(mask, x, torch.full_like(x, 0)).sum(dim=dim)
     mean = value / num
@@ -463,5 +415,3 @@ def make_serializable(config_sample):
     if not is_json_serializable(config_sample):
         config_sample = str(config_sample)
     return config_sample
-
-

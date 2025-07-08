@@ -7,7 +7,8 @@ from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.datasets import load_breast_cancer
 from tunetables_light.scripts.transformer_prediction_interface import (
-    TuneTablesClassifierLight, TuneTablesZeroShotClassifier
+    TuneTablesClassifierLight,
+    TuneTablesZeroShotClassifier,
 )
 
 
@@ -51,10 +52,18 @@ class TestTuneTablesClassifierFit(unittest.TestCase):
         print("X_train:", X_train.shape, "y_train:", y_train.shape)
         print("X_test: ", X_test.shape, "y_test: ", y_test.shape)
 
-        model = TuneTablesClassifierLight(epoch=4, device="cpu", dropout=0.2, bagging=False, subset_features_method="pca")
+        model = TuneTablesClassifierLight(
+            epoch=1,
+            device="cpu",
+            dropout=0.2,
+            bagging=False,
+            subset_features_method="pca",
+        )
         model.fit(X_train, y_train)
         model.save_model("my_model_2")
         y_hat = model.predict_proba(X_test)
+        print(f"Pred shape: {y_hat.shape}")
+        print(f"Test shape: {y_test.shape}")
         n_classes = 2
         y_pred = np.argmax(y_hat, axis=1)
         accuracy = accuracy_score(y_test, y_pred)
@@ -98,11 +107,12 @@ class TestTuneTablesClassifierLoad(unittest.TestCase):
         accuracy = accuracy_score(y_test, y_pred)
         print(f"Accuracy: {accuracy:.4f}")
 
+
 class TestTabPFNClassifierLoad(unittest.TestCase):
     def test_main(self):
         X_train, X_test, y_train, y_test = make_breast_cancer_dataset()
         model = TuneTablesZeroShotClassifier()
         model.fit(X_train, y_train)
-        y_hat = model.predict_proba(X_test)[:,1]
+        y_hat = model.predict_proba(X_test)[:, 1]
         fpr, tpr, _ = roc_curve(y_test, y_hat)
         print("AUROC", auc(fpr, tpr))

@@ -283,7 +283,7 @@ def train(
             test_index = dataset.split_indeces[1]
         else:
             for i, split_dictionary in enumerate(dataset.split_indeces):
-                if i != extra_prior_kwargs_dict.get("split"):  
+                if i != extra_prior_kwargs_dict.get("split"):
                     continue
                 train_index = split_dictionary["train"]
                 val_index = split_dictionary["val"]
@@ -295,7 +295,7 @@ def train(
                 train_index,
                 val_index,
                 test_index,
-                verbose=extra_prior_kwargs_dict.get("verbose"),  
+                verbose=extra_prior_kwargs_dict.get("verbose"),
                 scaler="None",
                 one_hot_encode=extra_prior_kwargs_dict.get("ohe", True),
                 impute=extra_prior_kwargs_dict.get("do_impute", True),
@@ -538,7 +538,9 @@ def train(
                 print("Size of data for fitting: ", len(data_for_fitting[0]))
 
         if do_zs or do_kl_loss:
-            from tunetables_light.scripts.transformer_prediction_interface import TuneTablesZeroShotClassifier
+            from tunetables_light.scripts.transformer_prediction_interface import (
+                TuneTablesZeroShotClassifier,
+            )
 
             if extra_prior_kwargs_dict.get("zs_eval_ensemble", 0) > 0:
                 ens_size = extra_prior_kwargs_dict.get("zs_eval_ensemble", 0)
@@ -1432,7 +1434,7 @@ def train(
                             n
                         )
                     )
-            t_model.train()  
+            t_model.train()
             total_loss, _, time_to_get_batch, forward_time, step_time, _, _ = (
                 train_epoch(
                     t_model,
@@ -1908,13 +1910,17 @@ def train(
                         current_outs[m] += output_dict[j][m]
                     current_outs[m] /= i + 1
                 else:
-                    current_outs[m] = torch.from_numpy(output_dict[0][m]).to(device=device, dtype=torch.float32)
+                    current_outs[m] = torch.from_numpy(output_dict[0][m]).to(
+                        device=device, dtype=torch.float32
+                    )
                     for j in range(1, i + 1):
                         if j not in models_to_include:
                             continue
 
-                        boost_res = boosting_lr * torch.from_numpy(output_dict[j][m]).to(device=device, dtype=torch.float32)
-                        current_outs[m] = current_outs[m] + boost_res  
+                        boost_res = boosting_lr * torch.from_numpy(
+                            output_dict[j][m]
+                        ).to(device=device, dtype=torch.float32)
+                        current_outs[m] = current_outs[m] + boost_res
                 _, current_preds[m] = torch.max(current_outs[m].cpu().data, 1)
                 correct = (
                     (current_preds[m] == torch.from_numpy(test_targets[m])).sum().item()
@@ -1964,7 +1970,7 @@ def train(
                 print("Early stopping after {} ensembles".format(i))
                 break
 
-    if rank == 0:  
+    if rank == 0:
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model = model.module
             dl = None
