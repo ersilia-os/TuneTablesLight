@@ -93,8 +93,19 @@ def real_data_eval_out(
     output_list = []
 
     with torch.inference_mode():
-        for data, targets, _ in tqdm(
-            val_dl, desc="Running inference", unit="batch", colour="green", ncols=80
+        for data, targets, _ in tqdm(val_dl,                     
+                                     total=(len(val_dl)),
+                    desc="Inference Batches",
+                    ncols=100,
+                    colour="magenta",
+                    dynamic_ncols=True,
+                    bar_format=(
+                        "{desc} |" 
+                        " {bar:30} |" 
+                        " {percentage:3.0f}% " 
+                        "[{n_fmt}/{total_fmt} batches] " 
+                        "⏱️ {elapsed}<{remaining}"
+                    )
         ):
             batch_x = data[0].to(device, non_blocking=True).to(torch.float32)
             batch_y = data[1].to(device, non_blocking=True).to(torch.float32)
@@ -530,10 +541,6 @@ def train(
             return None, None, None, test_dl
 
         if verbose:
-            print("Dataset information: ")
-            print("Length, batch size of training dataloader: ", len(dl), dl.batch_size)
-            print("Length of validation dataloader: ", len(val_dl), val_dl.batch_size)
-            print("Length of test dataloader: ", len(test_dl), test_dl.batch_size)
             if data_for_fitting:
                 print("Size of data for fitting: ", len(data_for_fitting[0]))
 
@@ -564,7 +571,6 @@ def train(
             max_pos = int((len(data_for_fitting[0]) // 10) * (0.8))
             if verbose:
                 print("bptt changed from {} to {}".format(old_bptt, bptt))
-                print("max_pos: ", max_pos)
             if extra_prior_kwargs_dict.get("uniform_bptt", False):
                 single_eval_pos_gen = lambda: np.random.randint(0, max_pos)
             else:
@@ -829,10 +835,18 @@ def train(
             for batch, (data, targets, _) in enumerate(
                 tqdm(
                     val_dl,
-                    desc="Running Evaluation",
-                    unit="batch",
-                    colour="green",
-                    ncols=80,
+                    total=(len(val_dl)),
+                    desc="Training Batches",
+                    ncols=100,
+                    colour="magenta",
+                    dynamic_ncols=True,
+                    bar_format=(
+                        "{desc} |" 
+                        " {bar:30} |" 
+                        " {percentage:3.0f}% " 
+                        "[{n_fmt}/{total_fmt} batches] " 
+                        "⏱️ {elapsed}<{remaining}"
+                    ),
                 )
             ):
                 if extra_prior_kwargs_dict.get("debug", False):
@@ -1739,7 +1753,6 @@ def train(
             topk_ens_key = "Ens_" + topk_key.replace("nc_", "") + "_NC"
         else:
             topk_ens_key = "Ens_" + topk_key
-        print("Starting training loop \n \n")
         if bagging:
             subset_dataset = Subset(dl_backup.dataset, split_indices[i])
             dl, bptt = get_train_dataloader(

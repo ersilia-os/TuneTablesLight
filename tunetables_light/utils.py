@@ -10,7 +10,32 @@ import torch
 from torch import nn
 from torch.optim.lr_scheduler import LambdaLR
 import numpy as np
+from sklearn.utils import check_X_y
+from sklearn.base import BaseEstimator
 
+class RandomUnderSampler(BaseEstimator):
+    def __init__(self, positive_fraction=0.5, random_state=None):
+        self.positive_fraction = positive_fraction
+        self.random_state = random_state
+
+    def fit_resample(self, X, y):
+        X, y = check_X_y(X, y)
+        rng = np.random.RandomState(self.random_state)
+        classes, counts = np.unique(y, return_counts=True)
+        if len(classes) != 2:
+            raise ValueError("Only binary classification supported")
+        pos_label = classes[np.argmax(counts)] if counts[np.argmax(counts)] < counts[np.argmin(counts)] else classes[np.argmin(counts)]
+        neg_label = classes[1] if pos_label == classes[0] else classes[0]
+        idx_pos = np.where(y == pos_label)[0]
+        idx_neg = np.where(y == neg_label)[0]
+        n_pos = len(idx_pos)
+        desired_neg = int(n_pos * (1 - self.positive_fraction) / self.positive_fraction)
+        desired_neg = min(len(idx_neg), desired_neg)
+        idx_neg_down = rng.choice(idx_neg, size=desired_neg, replace=False)
+        idx_new = np.concatenate([idx_pos, idx_neg_down])
+        rng.shuffle(idx_new)
+        return X[idx_new], y[idx_new]
+    
 def install_psutil():
     subprocess.run(["pip", "install", "psutil"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 

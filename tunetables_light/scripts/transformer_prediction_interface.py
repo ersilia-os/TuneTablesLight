@@ -4,7 +4,6 @@ import pathlib
 import itertools
 import sys
 import os
-import math
 import pickle
 import io
 import numpy as np
@@ -26,6 +25,7 @@ from tunetables_light.utils import (
     remove_outliers,
     normalize_by_used_features_f,
 )
+from tunetables_light.utils import RandomUnderSampler
 from tunetables_light.scripts.model_builder import (
     load_model,
     load_model_only_inference,
@@ -37,13 +37,13 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
 from sklearn.base import BaseEstimator, ClassifierMixin
 from pathlib import Path
-from torch.utils.data import DataLoader, TensorDataset, Dataset
+from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
 
 MAX_INFERENCE_SIZE = 22_000
 MIN_INFERENCE_SIZE = 22_000 / 2
-MAX_EVAL_POS = 1700
+MAX_EVAL_POS = 1500
 
 class XDataset(Dataset):
     def __init__(self, X: torch.Tensor):
@@ -752,8 +752,10 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         subset_features_method="pca",
         batch_per_tunetabless_run=1152,
         tuned_prompt_label_balance="equal",
+        positive_fraction=0.3
     ):
         self.seed = seed
+        self.positive_fraction = positive_fraction
         self.batch_per_tunetabless_run = batch_per_tunetabless_run
         self.subset_features_method = subset_features_method
         self.subsampling_size = subsampling_size
@@ -797,7 +799,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         self.args = self.get_default_config(self.args)
 
         self.config, self.model_string = reload_config(longer=1, args=self.args)
-
+        self.ru = RandomUnderSampler(positive_fraction=self.positive_fraction)
         import ConfigSpace
 
         for k, v in self.config.items():
@@ -868,6 +870,13 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
         return model[2], c
 
     def _fit(self, X, y):
+        pos_count = len([v for v in y if v==1])
+        neg_count = len([v for v in y if v==0])
+        print(f"→ Original class counts -> positive: {pos_count} | negative: {neg_count}")
+        X, y = self.ru.fit_resample(X, y)
+        pos_count = len([v for v in y if v==1])
+        neg_count = len([v for v in y if v==0])
+        print(f"→ Resampled class counts -> positive: {pos_count} | negative: {neg_count}")
         model, data_for_fitting, _ = train_function(
             self.config.copy(),
             0,
@@ -978,7 +987,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
 
             loader = DataLoader(
                 xdataset,
-                batch_size=1500,
+                batch_size=1000,
                 shuffle=False,
                 drop_last=False, 
                 num_workers=4
