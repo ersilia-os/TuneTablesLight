@@ -9,7 +9,6 @@ from sklearn.datasets import load_breast_cancer
 from tunetables_light.scripts.transformer_prediction_interface import (
     TuneTablesClassifierLight,
     TuneTablesZeroShotClassifier,
-    transformer_onnx_predict
 )
 
 
