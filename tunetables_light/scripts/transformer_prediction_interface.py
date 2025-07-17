@@ -884,7 +884,7 @@ class TuneTablesClassifierLight(BaseEstimator, ClassifierMixin):
 
     def _fit_only_prefitted(self, X, y):
         model, c = load_model_only_inference(
-            self.base_path, self.model_file, self.device, prefix_size=10, n_classes=2
+            self.base_path, self.model_file, self.device, prefix_size=self.tuned_prompt_size, n_classes=2
         )
         return model[2], c
 
