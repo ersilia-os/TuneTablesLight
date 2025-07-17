@@ -179,7 +179,7 @@ def taylor_linear_attention_forward(
     # Apply the linear attention
     if need_weights:
         # Compute attention weights using Taylor approximation
-        q_scaled = q * math.sqrt(1.0 / float(head_dim))
+        q_scaled = q * torch.rsqrt(E.to(dtype=torch.float))
         attn_output_weights = torch.einsum("bnd,bmd->bnm", q_scaled, k)
 
         if attn_mask is not None:

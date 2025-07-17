@@ -117,8 +117,9 @@ def real_data_eval_out(
             inp1 = torch.cat((td1, batch_y), dim=0)
             model_input = (inp0, inp1)
 
-            with torch.amp.autocast(device_type="cuda"):
-                out = r_model(model_input, single_eval_pos=cl)
+            with torch.amp.autocast(device_type=device):
+                r_model.single_eval_pos = cl
+                out = r_model(model_input)
 
             out = out[:, :num_classes_local] / torch.exp(softmax_temperature)
             out = F.softmax(out, dim=-1)
@@ -808,7 +809,7 @@ def train(
         optimizer, warmup_epochs, epochs if epochs is not None else 100
     )
 
-    scaler = GradScaler() if train_mixed_precision else None
+    scaler = GradScaler(device=device) if train_mixed_precision else None
 
     utils.check_compatibility(dl)
 
@@ -857,11 +858,11 @@ def train(
                     torch.cat((td[0], data[0]), dim=0).to(torch.float32),
                     torch.cat((td[1], data[1]), dim=0).to(torch.float32),
                 ])
+                r_model.single_eval_pos = single_eval_pos
                 output = r_model(
                     tuple(e.to(device) if torch.is_tensor(e) else e for e in batch_data)
                     if isinstance(batch_data, tuple)
                     else batch_data.to(device),
-                    single_eval_pos=single_eval_pos,
                 )
                 new_output = loop_translate(output, invert_perm_map)
                 output = new_output
@@ -981,8 +982,9 @@ def train(
                     )
                 else:
                     single_eval_pos = max(targets.shape[0] - bptt_extra_samples, 0)
-                with autocast("cuda", enabled=scaler is not None):
+                with autocast(device, enabled=scaler is not None, dtype=torch.float16):
                     # If style is set to None, it should not be transferred to device
+                    e_model.single_eval_pos = single_eval_pos
                     output = e_model(
                         tuple(
                             e.to(torch.float32).to(device) if torch.is_tensor(e) else e
@@ -990,7 +992,6 @@ def train(
                         )
                         if isinstance(data, tuple)
                         else data.to(device),
-                        single_eval_pos=single_eval_pos,
                     )
                     if not bptt_search:
                         assert output.requires_grad, "Output does not require gradients"

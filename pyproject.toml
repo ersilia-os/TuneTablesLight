@@ -21,8 +21,6 @@ dependencies=[
         'tqdm>=4.62.1',
         'configspace==0.4.21',
         'pandas==2.3.0',
-        "umap-learn",
-        "faiss-cpu"
 ]
 
 

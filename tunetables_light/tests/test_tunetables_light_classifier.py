@@ -1,5 +1,5 @@
 import unittest
-
+import os
 import numpy as np
 from sklearn.metrics import accuracy_score, roc_auc_score, auc, roc_curve
 from sklearn.datasets import fetch_covtype
@@ -9,6 +9,7 @@ from sklearn.datasets import load_breast_cancer
 from tunetables_light.scripts.transformer_prediction_interface import (
     TuneTablesClassifierLight,
     TuneTablesZeroShotClassifier,
+    transformer_onnx_predict
 )
 
 
@@ -53,7 +54,7 @@ class TestTuneTablesClassifierFit(unittest.TestCase):
         print("X_test: ", X_test.shape, "y_test: ", y_test.shape)
 
         model = TuneTablesClassifierLight(
-            epoch=1,
+            epoch=2,
             device="cpu",
             dropout=0.2,
             bagging=False,
@@ -100,9 +101,13 @@ class TestTuneTablesClassifierLoadWithClassImbalance(unittest.TestCase):
 
 class TestTuneTablesClassifierLoad(unittest.TestCase):
     def test_main(self):
-        X_train, X_test, y_train, y_test = make_forest_cov_dataset(100_000)
-        model = TuneTablesClassifierLight.load_model("my_model")
-        y_hat = model.predict_proba(X_test)
+        X_train, X_test, y_train, y_test = make_breast_cancer_dataset()
+        import torch
+        X_test, y_test = torch.from_numpy(X_test), torch.from_numpy(y_test)
+        path = os.path.abspath("my_model_2/")
+        print(path)
+        model = TuneTablesClassifierLight.load_model(path)
+        y_hat = model.predict_proba(X_test, path=path)
         y_pred = np.argmax(y_hat, axis=1)
         accuracy = accuracy_score(y_test, y_pred)
         print(f"Accuracy: {accuracy:.4f}")
